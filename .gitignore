@@ -1,0 +1,19 @@
+node_modules
+.devtools
+.DS_Store
+dist
+dist-ssr
+*.local
+# Environment files — never commit secrets
+.env
+.env.*
+.env*.local
+!.env.example
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json
+.vercel
