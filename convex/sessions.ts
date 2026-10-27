@@ -24,6 +24,8 @@ export const getTitle = query({
 	},
 });
 
+const USER_ACTION_TOOLS = ["askUserQuestionnaire", "guide_steps", "propose_resolution"];
+
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -33,14 +35,90 @@ export const list = query({
 			.withIndex("by_user_updated", (q) => q.eq("userId", userId))
 			.order("desc")
 			.collect();
-		return sessions.map(({ _id, chatKey, title, status, createdAt, updatedAt }) => ({
-			_id,
-			chatId: chatKey ?? _id,
-			title,
-			status,
-			createdAt,
-			updatedAt,
-		}));
+		return Promise.all(
+			sessions.map(async ({ _id, chatKey, title, status, createdAt, updatedAt }) => {
+				// Waiting on the user when the newest message is an assistant
+				// turn with an interactive card that has no result yet.
+				const last = await ctx.db
+					.query("messages")
+					.withIndex("by_session_sequence", (q) => q.eq("sessionId", _id))
+					.order("desc")
+					.first();
+				const awaitingUser =
+					last?.role === "assistant" &&
+					(last.parts as Array<{ type?: string; toolName?: string; state?: string }>).some(
+						(part) => {
+							const name =
+								part.toolName ?? (part.type ?? "").replace(/^tool-/, "");
+							return (
+								USER_ACTION_TOOLS.includes(name) &&
+								part.state !== "output-available" &&
+								part.state !== "output-error"
+							);
+						}
+					);
+				return {
+					_id,
+					chatId: chatKey ?? _id,
+					title,
+					status,
+					awaitingUser,
+					createdAt,
+					updatedAt,
+				};
+			})
+		);
+	},
+});
+
+export const setStatus = mutation({
+	args: {
+		chatId: v.string(),
+		status: v.union(
+			v.literal("active"),
+			v.literal("resolved"),
+			v.literal("archived")
+		),
+	},
+	handler: async (ctx, { chatId, status }) => {
+		const userId = await requireUserId(ctx);
+		let session;
+		try {
+			session = await ctx.db.get(chatId as Id<"sessions">);
+		} catch {
+			/* Check the chat key below. */
+		}
+		if (!session) {
+			session = await ctx.db
+				.query("sessions")
+				.withIndex("by_chat_key", (q) => q.eq("chatKey", chatId))
+				.first();
+		}
+		if (!session || session.userId !== userId) {
+			throw new Error("Session not found");
+		}
+		await ctx.db.patch(session._id, { status, updatedAt: Date.now() });
+	},
+});
+
+export const remove = mutation({
+	args: { sessionId: v.id("sessions") },
+	handler: async (ctx, { sessionId }) => {
+		const userId = await requireUserId(ctx);
+		const session = await ctx.db.get(sessionId);
+		if (!session || session.userId !== userId) {
+			throw new Error("Session not found");
+		}
+		for (const table of ["messages", "questionnaires", "guide_step_results"] as const) {
+			const rows = await ctx.db
+				.query(table)
+				.withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+				.collect();
+			for (const row of rows) {
+				await ctx.db.delete(row._id);
+			}
+		}
+		await ctx.db.delete(sessionId);
 	},
 });
 

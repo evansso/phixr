@@ -8,8 +8,11 @@ import { ShimmerText } from "#/components/shimmer-text";
 import { AssistantMessageActions } from "./assistant-message-actions";
 import { QuestionnaireAskedStatus, QuestionnaireCard } from "./questionnaire-card";
 import type { Questionnaire, ToolOutput } from "#/lib/questionnaire/schema";
+import { ResolutionCard, ResolutionSummary } from "./resolution-card";
+import type { ResolutionInput, ResolutionOutput } from "#/lib/resolution/schema";
 import { GuideStepsCard } from "#/components/GuideStepsCard";
 import { GuideStepsSummary } from "#/components/GuideStepsSummary";
+import { ScrollArea } from "#/components/ui/scroll-area";
 import type { GuideStepsInput, GuideStepsOutput } from "#/lib/guide-steps/schema";
 import { hostOf } from "./status-line";
 
@@ -80,7 +83,7 @@ function toolLabel(part: ActivityPart, pending: boolean) {
 function researchSource(url: string, title: string) {
 	try {
 		const hostname = new URL(url).hostname.replace(/^www\./, "");
-		return <a className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden text-sm text-foreground" href={url} key={url} rel="noreferrer" target="_blank"><img alt="" className="size-5 shrink-0 rounded-md border bg-background object-cover" loading="lazy" src={`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(url)}&sz=64`} /><span className="min-w-0 flex-1 truncate text-foreground" title={title || hostname}>{title || hostname}</span><span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground" title={hostname}>{hostname}</span></a>;
+		return <a className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-muted" href={url} key={url} rel="noreferrer" target="_blank"><img alt="" className="size-5 shrink-0 rounded-md border bg-background object-cover" loading="lazy" src={`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(url)}&sz=64`} /><span className="min-w-0 flex-1 truncate text-foreground" title={title || hostname}>{title || hostname}</span><span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground" title={hostname}>{hostname}</span></a>;
 	} catch { return null; }
 }
 
@@ -155,7 +158,7 @@ export function AssistantMessage({
 	const lastActionIndex = new Map<string, number>();
 	parts.forEach((part, index) => {
 		const name = part.toolName ?? part.type.replace(/^tool-/, "");
-		if (name === "askUserQuestionnaire" || name === "guide_steps") {
+		if (name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") {
 			lastActionIndex.set(name, index);
 		}
 	});
@@ -181,7 +184,7 @@ export function AssistantMessage({
 			if (typeof input.message === "string") flow.push({ key: `reply-${info.toolCallId}`, index, kind: "text", text: input.message });
 			continue;
 		}
-		if ((name === "askUserQuestionnaire" || name === "guide_steps") && lastActionIndex.get(name) !== index) continue;
+		if ((name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") && lastActionIndex.get(name) !== index) continue;
 
 		if (name === "askUserQuestionnaire") {
 			if (shownQuestionnaires.has(info.toolCallId) || hiddenActionCallIds?.has(info.toolCallId)) continue;
@@ -247,6 +250,17 @@ export function AssistantMessage({
 			}
 			continue;
 		}
+		if (name === "propose_resolution") {
+			if (info.state === "input-streaming") {
+				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, node: <p className="text-sm"><ShimmerText>Preparing your summary</ShimmerText></p> });
+			} else if (info.state === "input-available" && info.input) {
+				const input = info.input as ResolutionInput;
+				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
+			} else if (info.state === "output-available" && info.input && info.output) {
+				flow.push({ key: info.toolCallId, index, kind: "action", node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
+			}
+			continue;
+		}
 
 		// Research and any other visible tool: status line first, then
 		// its content (sources) directly underneath, inline in the flow.
@@ -273,7 +287,7 @@ export function AssistantMessage({
 					<span className="min-w-0 flex-1 truncate">{pending ? <ShimmerText>{activityStatus}</ShimmerText> : activityStatus}</span>
 					{resultCount !== null ? <span className="shrink-0 text-xs tabular-nums">{resultCount} {resultCount === 1 ? "result" : "results"}</span> : null}
 				</p>
-				{sources.length ? <div className="w-full rounded-lg border bg-background px-4 py-2"><ul className="flex flex-col gap-2">{sources.map((source) => <li key={source.key}>{source}</li>)}</ul></div> : output.error || info.state === "output-error" ? <p className="text-sm text-muted-foreground">Couldn't reach the docs. Continuing with what I know.</p> : pending ? null : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
+				{sources.length ? <ScrollArea className="h-[150px] w-full rounded-lg border bg-background" scrollbarGutter><div className="px-4 py-2"><ul className="flex flex-col gap-2">{sources.map((source) => <li key={source.key}>{source}</li>)}</ul></div></ScrollArea> : output.error || info.state === "output-error" ? <p className="text-sm text-muted-foreground">Couldn't reach the docs. Continuing with what I know.</p> : pending ? null : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
 			</div>,
 		});
 	}

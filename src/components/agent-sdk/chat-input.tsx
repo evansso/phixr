@@ -332,6 +332,7 @@ export function AgentChatInput({
 						if (part.state !== "input-available") return rawPart;
 						if (part.type === "tool-askUserQuestionnaire") return { ...part, state: "output-available", output: { status: "skipped", reason: "user_sent_new_message" } } as typeof rawPart;
 						if (part.type === "tool-guide_steps") return { ...part, state: "output-available", output: { results: [], stoppedReason: "interrupted" } } as typeof rawPart;
+						if (part.type === "tool-propose_resolution") return { ...part, state: "output-available", output: { status: "not_sure" } } as typeof rawPart;
 						return rawPart;
 					}),
 				})));

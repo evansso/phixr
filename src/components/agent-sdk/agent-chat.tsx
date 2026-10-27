@@ -35,7 +35,7 @@ function shouldContinueAfterToolResult({ messages }: { messages: UIMessage[] }) 
 			const tool = part as UIMessage["parts"][number] & { toolName?: string; state?: string };
 			const name = tool.toolName ?? tool.type.replace(/^tool-/, "");
 			return (isToolUIPart(part) || tool.type === "dynamic-tool") &&
-				(name === "askUserQuestionnaire" || name === "guide_steps") &&
+				(name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") &&
 				tool.state !== "output-available";
 		}
 	);

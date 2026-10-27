@@ -17,6 +17,7 @@ import { guide_steps } from "#/lib/guide-steps/tool";
 import { buildSystemPrompt } from "#/lib/prompt";
 import { submitQuestionnaire } from "#/lib/questionnaire/persistence";
 import { askUserQuestionnaire } from "#/lib/questionnaire/tool";
+import { propose_resolution } from "#/lib/resolution/tool";
 import { fetch_page, search_web } from "#/lib/research/tools";
 import { skillIndex } from "#/lib/skills/index";
 import { load_skill } from "#/lib/skills/tool";
@@ -111,6 +112,13 @@ async function closeDanglingToolCalls(
 							...candidate,
 							state: "output-available",
 							output: { status: "skipped", reason: "user_sent_new_message" },
+						};
+					}
+					if (candidate.type === "tool-propose_resolution") {
+						return {
+							...candidate,
+							state: "output-available",
+							output: { status: "not_sure" },
 						};
 					}
 					if (
@@ -354,6 +362,7 @@ export const Route = createFileRoute("/api/chat")({
 							tools: {
 								...(canAskQuestionnaire ? { askUserQuestionnaire } : {}),
 								guide_steps,
+								propose_resolution,
 								search_web,
 								fetch_page,
 								...(load_skill ? { load_skill } : {}),
@@ -374,6 +383,7 @@ export const Route = createFileRoute("/api/chat")({
 								const activeTools = [
 									...(canAskQuestionnaire ? ["askUserQuestionnaire"] : []),
 									"guide_steps",
+									"propose_resolution",
 									...(load_skill ? ["load_skill"] : []),
 								];
 								return { activeTools: activeTools as never[] };

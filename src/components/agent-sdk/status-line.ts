@@ -38,6 +38,7 @@ export function statusLine(
 		: {};
 	if (name === "askUserQuestionnaire") return "Preparing a few questions";
 	if (name === "guide_steps") return "Writing your steps";
+	if (name === "propose_resolution") return "Preparing your summary";
 	if (name === "load_skill" || name === "frame") return "Thinking";
 	if (name === "search_web" || name === "web_search") {
 		return typeof input.purpose === "string" && input.purpose.trim()

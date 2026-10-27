@@ -170,7 +170,7 @@ export function QuestionnaireAnswersCard({ title, answers }: { title?: string; a
 			<span className="shrink-0 text-xs tabular-nums text-muted-foreground">{answers.length} {answers.length === 1 ? "answer" : "answers"}</span>
 		</div>
 		<dl className="flex flex-col gap-3">
-			{answers.map((answer) => <div className="grid gap-1 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] sm:gap-4" key={answer.questionId}>
+			{answers.map((answer) => <div className="flex flex-col gap-0.5" key={answer.questionId}>
 				<dt className="text-xs leading-relaxed text-muted-foreground">{answer.prompt}</dt>
 				<dd className="min-w-0 text-sm leading-relaxed">{answer.answer === null ? "Skipped" : typeof answer.answer === "boolean" ? answer.answer ? "Yes" : "No" : Array.isArray(answer.answer) ? answer.answer.join(", ") : answer.answer}{answer.other ? `: ${answer.other}` : ""}</dd>
 			</div>)}

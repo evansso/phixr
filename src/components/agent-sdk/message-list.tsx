@@ -84,7 +84,7 @@ export function AgentMessageList({
 	const waitingOnUser = messages.at(-1)?.role === "assistant" && messages.at(-1)?.parts.some((part) => {
 		const tool = part as { type?: string; toolName?: string; state?: string };
 		const name = tool.toolName ?? tool.type?.replace(/^tool-/, "");
-		return (name === "askUserQuestionnaire" || name === "guide_steps") && tool.state !== "output-available" && tool.state !== "output-error";
+		return (name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") && tool.state !== "output-available" && tool.state !== "output-error";
 	});
 	const hasError = !waitingOnUser && Boolean(storedError);
 	const retry = onRetry ?? (() => {
