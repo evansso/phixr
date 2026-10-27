@@ -219,7 +219,7 @@ export function AppSidebar() {
 																			awaitingUser={session.awaitingUser}
 																			status={session.status}
 																		/>
-																		<span className="min-w-0 flex-1 truncate text-left text-[13px]">
+																		<span className="min-w-0 flex-1 truncate text-left text-[15px]">
 																			{title}
 																		</span>
 																	</SidebarMenuButton>
@@ -257,7 +257,7 @@ export function AppSidebar() {
 																		}}
 																		showOnHover
 																	>
-																		<Archive aria-hidden="true" className="size-4" />
+																		<Archive aria-hidden="true" className="size-3!" />
 																	</SidebarMenuAction>
 																}
 															/>
