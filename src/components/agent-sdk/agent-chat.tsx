@@ -260,7 +260,7 @@ function AgentChatContent({
 			{children}
 			{showNewChat ? null : (
 				<AgentHeader className="sticky top-0 z-10 justify-center bg-background text-sm">
-					{showSidebarTrigger && <SidebarTrigger className="absolute top-1/2 left-3 -translate-y-1/2" />}
+					{showSidebarTrigger && <SidebarTrigger className="absolute top-1/2 left-3 -translate-y-1/2" size="icon-xs" />}
 					{currentTitle}
 				</AgentHeader>
 			)}

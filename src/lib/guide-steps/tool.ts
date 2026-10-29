@@ -18,7 +18,7 @@ Each step:
 - capture: required if you must read their output, optional if helpful, none if the outcome alone is enough. Do not ask for pasted output you will not use.
 
 Turn rules:
-- Before calling this tool, stream one short paragraph explaining the next action and, when research ran, its useful finding. Add intro only if those findings have not already been explained. After calling this tool, your turn is over. The results arrive as the tool result.
+- The streamed text earlier in your turn already carries the finding and the reason for this action. Do not add text announcing the guide ("I'll prepare your steps"), and add intro only if those findings have not already been explained. After calling this tool, your turn is over. The results arrive as the tool result.
 - Results may be partial. The user may stop at any step, and you receive only the steps they reached.
 
 Voice: short, calm, specific. No filler, no exclamation marks, no apologies, no em dashes. State uncertainty plainly. Examples:

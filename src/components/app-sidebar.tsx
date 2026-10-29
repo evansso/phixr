@@ -140,9 +140,9 @@ export function AppSidebar() {
 
 	return (
 		<Sidebar>
-			<SidebarHeader className="flex-row items-center justify-between px-3 py-2">
-				<Logo className="h-5 w-auto text-sidebar-foreground" />
-				<SidebarTrigger aria-label="Close sidebar" />
+			<SidebarHeader className="flex-row items-center justify-between px-4 py-3">
+				<Logo className="h-4 w-auto text-sidebar-foreground" />
+				<SidebarTrigger aria-label="Close sidebar" size="icon-xs" />
 			</SidebarHeader>
 
 			<SidebarContent>
@@ -201,7 +201,7 @@ export function AppSidebar() {
 																delay={300}
 																render={
 																	<SidebarMenuButton
-																		className="h-auto min-h-8 pr-7"
+																		className="h-auto min-h-8 group-has-data-[sidebar=menu-action]/menu-item:pr-2!"
 																		isActive={Boolean(
 																			matchRoute({
 																				params: { chatId: session.chatId },
@@ -219,7 +219,7 @@ export function AppSidebar() {
 																			awaitingUser={session.awaitingUser}
 																			status={session.status}
 																		/>
-																		<span className="min-w-0 flex-1 truncate text-left text-[15px]">
+																		<span className="min-w-0 flex-1 truncate text-left text-[13px]">
 																			{title}
 																		</span>
 																	</SidebarMenuButton>
@@ -250,6 +250,7 @@ export function AppSidebar() {
 																render={
 																	<SidebarMenuAction
 																		aria-label={`Delete ${title}`}
+																		className="bg-sidebar-accent"
 																		onClick={(event) => {
 																			event.preventDefault();
 																			event.stopPropagation();
@@ -257,7 +258,7 @@ export function AppSidebar() {
 																		}}
 																		showOnHover
 																	>
-																		<Archive aria-hidden="true" className="size-3!" />
+																		<Archive aria-hidden="true" className="size-3.5!" />
 																	</SidebarMenuAction>
 																}
 															/>

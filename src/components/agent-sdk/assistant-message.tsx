@@ -1,6 +1,10 @@
 import { isToolUIPart, type UIMessage } from "ai";
-import { Brain, Globe, RotateCcwIcon } from "lucide-react";
+import { Brain, Check, ChevronDown, CircleHelp, Flag, Globe, ListChecks, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { cn } from "#/lib/utils";
+import { PhixrIcon } from "#/components/phixr-icon";
+import { Spinner } from "#/components/spinner";
+import { motion } from "motion/react";
 import { useChatActions } from "@ai-sdk-tools/store";
 import { ChatMessage } from "#/components/chat/chat-message";
 import { Button } from "#/components/ui/button";
@@ -31,9 +35,93 @@ type FlowItem = {
 	kind: "text" | "activity" | "action" | "label";
 	text?: string;
 	node?: ReactNode;
+	icon?: ReactNode;
 	pending?: boolean;
 	awaitingUser?: boolean;
 };
+
+/** Left rail node: a bare icon on the line, no box. While a step is
+ * live the icon is replaced by the Trace spinner. */
+function FlowNode({ icon, pending, awaitingUser }: { icon?: ReactNode; pending?: boolean; awaitingUser?: boolean }) {
+	return (
+		<span
+			aria-hidden="true"
+			className={cn(
+				"relative z-10 grid size-7 shrink-0 place-items-center bg-background text-muted-foreground",
+				awaitingUser && "text-foreground"
+			)}
+		>
+			{pending ? <Spinner size={18} /> : icon ?? <PhixrIcon className="size-3.5" />}
+		</span>
+	);
+}
+
+/**
+ * One finished activity on the rail. While pending it is only a shimmering
+ * label; once done it collapses to a single row the user can open to see
+ * what actually happened (sources, counts, …). Closed by default.
+ */
+function CollapsibleActivity({
+	label,
+	pending,
+	meta,
+	hasDetail,
+	children,
+}: {
+	label: string;
+	pending?: boolean;
+	meta?: string;
+	hasDetail?: boolean;
+	children?: ReactNode;
+}) {
+	const [open, setOpen] = useState(false);
+	if (pending) {
+		return (
+			<p className="flex min-h-7 items-center text-sm">
+				<ShimmerText>{label}</ShimmerText>
+			</p>
+		);
+	}
+	if (!hasDetail) {
+		return (
+			<p className="flex min-h-7 items-center gap-2 text-sm text-muted-foreground">
+				<span className="min-w-0 flex-1 truncate">{label}</span>
+				{meta ? <span className="shrink-0 text-xs tabular-nums">{meta}</span> : null}
+			</p>
+		);
+	}
+	return (
+		<div className="min-w-0">
+			<button
+				aria-expanded={open}
+				className="flex min-h-7 w-full items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+				onClick={() => setOpen((value) => !value)}
+				type="button"
+			>
+				<span className="min-w-0 flex-1 truncate">{label}</span>
+				{meta ? <span className="shrink-0 text-xs tabular-nums">{meta}</span> : null}
+				<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", open && "rotate-180")} />
+			</button>
+			{/* One animation only: height on a single material-standard
+			    curve. Stacking an opacity fade on a different curve, or
+			    a short ease-out that starts fast and snaps shut, is what
+			    made this feel rough. Content stays mounted (clipped) so
+			    closing animates too, not just opening. */}
+			<div
+				aria-hidden={!open}
+				inert={!open}
+				className={cn(
+					"grid transition-[grid-template-rows] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
+					open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"
+				)}
+			>
+				<div className="overflow-hidden">
+					<div className="pt-2">{children}</div>
+				</div>
+			</div>
+		</div>
+	);
+}
 
 function toolIcon(part: ActivityPart) {
 	const rawName = part.toolName ?? part.type.replace(/^tool-/, "");
@@ -47,11 +135,14 @@ function toolIcon(part: ActivityPart) {
 	return null;
 }
 
-function toolLabel(part: ActivityPart, pending: boolean) {
+function toolLabel(part: ActivityPart, pending: boolean, completed?: { resultCount?: number | null; hasError?: boolean }) {
 	const rawName = part.toolName ?? part.type.replace(/^tool-/, "");
 	const normalizedName = rawName.toLowerCase().replaceAll("_", "");
-	if (normalizedName === "memorysearch" || normalizedName === "memoryremember") {
-		return pending ? "Remembering" : "Remembered";
+	if (normalizedName === "memorysearch") {
+		return pending ? "Looking back for useful context…" : "Found something from earlier";
+	}
+	if (normalizedName === "memoryremember") {
+		return pending ? "Keeping that in mind…" : "Remembered";
 	}
 	const name = rawName
 		.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -60,14 +151,24 @@ function toolLabel(part: ActivityPart, pending: boolean) {
 		part.input && typeof part.input === "object"
 			? (part.input as Record<string, unknown>)
 			: {};
-	if (normalizedName === "searchweb") {
-		return typeof input.purpose === "string" && input.purpose.trim()
-			? input.purpose
-			: "Searching the web";
+	if (normalizedName === "searchweb" || normalizedName === "websearch") {
+		if (pending) {
+			return typeof input.purpose === "string" && input.purpose.trim()
+				? input.purpose
+				: "Looking for clues…";
+		}
+		if (completed?.hasError || part.state === "output-error") return "Couldn't look for clues";
+		const count = completed?.resultCount;
+		if (count === 0) return "No useful sources found";
+		return count != null
+			? `Found ${count} useful ${count === 1 ? "source" : "sources"}`
+			: "Looked for clues";
 	}
-	if (normalizedName === "fetchpage") {
-		const focus = typeof input.focus === "string" ? input.focus.trim() : "";
-		return focus || `Reading ${hostOf(typeof input.url === "string" ? input.url : undefined)}`;
+	if (normalizedName === "fetchpage" || normalizedName === "webfetch") {
+		const host = hostOf(typeof input.url === "string" ? input.url : undefined);
+		if (pending) return host === "the page" ? "Taking a closer look…" : `Checking ${host}'s guidance…`;
+		if (completed?.hasError || part.state === "output-error") return "Couldn't check that page";
+		return host === "the page" ? "Took a closer look" : `Checked ${host}'s guidance`;
 	}
 	const detail =
 		typeof input.query === "string"
@@ -83,7 +184,7 @@ function toolLabel(part: ActivityPart, pending: boolean) {
 function researchSource(url: string, title: string) {
 	try {
 		const hostname = new URL(url).hostname.replace(/^www\./, "");
-		return <a className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-muted" href={url} key={url} rel="noreferrer" target="_blank"><img alt="" className="size-5 shrink-0 rounded-md border bg-background object-cover" loading="lazy" src={`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(url)}&sz=64`} /><span className="min-w-0 flex-1 truncate text-foreground" title={title || hostname}>{title || hostname}</span><span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground" title={hostname}>{hostname}</span></a>;
+		return <a className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-0.5 text-sm text-foreground transition-colors duration-300 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" href={url} key={url} rel="noreferrer" target="_blank"><img alt="" className="size-5 shrink-0 rounded-md border bg-background object-cover" loading="lazy" src={`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(url)}&sz=64`} /><span className="min-w-0 flex-1 truncate text-foreground" title={title || hostname}>{title || hostname}</span><span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground" title={hostname}>{hostname}</span></a>;
 	} catch { return null; }
 }
 
@@ -98,16 +199,22 @@ export function AssistantStatusMessage({
 }) {
 	if (mode === "thinking") {
 		return (
-			<p aria-label="Agent is responding" className="text-sm">
-				<ShimmerText>{text ?? "Thinking"}</ShimmerText>
-			</p>
+			<div aria-label="Agent is responding" className="flex items-start gap-3">
+				<FlowNode pending />
+				<p className="flex min-h-7 items-center text-sm">
+					<ShimmerText>{text ?? "Putting on the troubleshooting hat…"}</ShimmerText>
+				</p>
+			</div>
 		);
 	}
 	if (mode === "continuing") {
 		return (
-			<p aria-label="Continuing this conversation" className="text-sm">
-				<ShimmerText>Continuing this conversation</ShimmerText>
-			</p>
+			<div aria-label="Continuing this conversation" className="flex items-start gap-3">
+				<FlowNode pending />
+				<p className="flex min-h-7 items-center text-sm">
+					<ShimmerText>Continuing this conversation</ShimmerText>
+				</p>
+			</div>
 		);
 	}
 
@@ -143,6 +250,13 @@ export function AssistantMessage({
 }) {
 	const { regenerate, addToolResult, sendMessage } = useChatActions();
 	const [revealComplete, setRevealComplete] = useState(!isStreaming);
+	// Entry animation is armed only after the first commit, so steps
+	// already on screen (history) never animate; only steps that appear
+	// while the turn flows in ease in.
+	const [entryArmed, setEntryArmed] = useState(false);
+	useEffect(() => {
+		setEntryArmed(true);
+	}, []);
 	const actionTopRef = useRef<HTMLDivElement>(null);
 	const previousActionCount = useRef(0);
 
@@ -164,13 +278,14 @@ export function AssistantMessage({
 	});
 	const shownQuestionnaires = new Set<string>();
 
-	// One flow, in the order the model produced it: streamed text,
-	// inline tool activity (status + sources), then the next text or
-	// card. Nothing is grouped into a collapsible.
+	// One timeline, in the order the model produced it: a node on the
+	// left rail per step — streamed text, tool activity, then the next
+	// text or card. Live steps shimmer; finished activities collapse to
+	// a closed row the user can open.
 	const flow: FlowItem[] = [];
 	for (const [index, part] of parts.entries()) {
 		if (part.type === "text") {
-			if (part.text) flow.push({ key: `text-${index}`, index, kind: "text", text: part.text });
+			if (part.text) flow.push({ key: `text-${index}`, index, kind: "text", text: part.text, icon: <PhixrIcon className="size-3.5" /> });
 			continue;
 		}
 		if (part.type === "reasoning" || part.type === "step-start") continue;
@@ -197,11 +312,22 @@ export function AssistantMessage({
 			// message keeps only a small label; the answers themselves
 			// arrive as the next user message.
 			if (recordedStatus ?? outputStatus) {
+				const effectiveStatus = (recordedStatus ?? outputStatus) as "submitted" | "skipped";
+				const submittedAnswers = info.state === "output-available" && info.output && typeof info.output === "object" && (info.output as ToolOutput).status === "submitted"
+					? (info.output as Extract<ToolOutput, { status: "submitted" }>).answers
+					: undefined;
+				const questionCount = info.input && typeof info.input === "object"
+					? (info.input as Questionnaire).questions?.length
+					: undefined;
+				const answerCount = effectiveStatus === "submitted"
+					? submittedAnswers?.length ?? questionCount
+					: undefined;
 				flow.push({
 					key: info.toolCallId,
 					index,
 					kind: "label",
-					node: <QuestionnaireAskedStatus status={(recordedStatus ?? outputStatus) as "submitted" | "skipped"} />,
+					icon: <Check aria-hidden="true" className="size-3.5 shrink-0" />,
+					node: <div className="flex min-h-7 items-center"><QuestionnaireAskedStatus count={answerCount} status={effectiveStatus} /></div>,
 				});
 				continue;
 			}
@@ -220,75 +346,106 @@ export function AssistantMessage({
 					metadata: answerMessage.metadata,
 				});
 			};
-			if (info.state === "input-streaming") {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, node: <p className="text-sm"><ShimmerText>Preparing a few questions</ShimmerText></p> });
+			const questionnaireIcon = <CircleHelp aria-hidden="true" className="size-3.5 shrink-0" />;
+			if (info.state === "input-streaming" || (info.state === "input-available" && isStreaming)) {
+				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: questionnaireIcon, node: <CollapsibleActivity label="Let's narrow this down…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as Questionnaire;
+				// The preparing step collapses shut, then the card itself
+				// becomes the next, ringed step on the rail.
+				flow.push({
+					key: `${info.toolCallId}-prepared`,
+					index,
+					kind: "activity",
+					icon: questionnaireIcon,
+					node: <CollapsibleActivity hasDetail label="Prepared questions" meta={`${input.questions.length} ${input.questions.length === 1 ? "question" : "questions"}`}><p className="text-xs leading-relaxed text-muted-foreground">{input.questions.length} {input.questions.length === 1 ? "question" : "questions"} ready below.</p></CollapsibleActivity>,
+				});
 				flow.push({
 					key: info.toolCallId,
 					index,
 					kind: "action",
 					awaitingUser: true,
+					icon: questionnaireIcon,
 					node: <>
 						{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}
-						{isStreaming
-							? <p className="text-sm"><ShimmerText>Preparing questions</ShimmerText></p>
-							: <QuestionnaireCard input={input} onDone={(output, answerMessage) => finishQuestionnaire(output, answerMessage)} sessionId={sessionId} toolCallId={info.toolCallId} />}
+						<QuestionnaireCard input={input} onDone={(output, answerMessage) => finishQuestionnaire(output, answerMessage)} sessionId={sessionId} toolCallId={info.toolCallId} />
 					</>,
 				});
 			}
 			continue;
 		}
 		if (name === "guide_steps") {
+			const guideIcon = <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />;
 			if (info.state === "input-streaming") {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, node: <p className="text-sm"><ShimmerText>Writing your steps</ShimmerText></p> });
+				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: guideIcon, node: <CollapsibleActivity label="Turning clues into a game plan…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as GuideStepsInput;
-				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, node: <>{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}<GuideStepsCard input={input} onDone={(output) => addToolResult({ tool: "guide_steps", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} toolCallId={info.toolCallId} /></> });
+				flow.push({
+					key: `${info.toolCallId}-prepared`,
+					index,
+					kind: "activity",
+					icon: guideIcon,
+					node: <CollapsibleActivity hasDetail label="Your next step is ready" meta={`${input.steps.length} ${input.steps.length === 1 ? "step" : "steps"}`}><p className="text-xs leading-relaxed text-muted-foreground">{input.planNote || "Follow the guide below, one step at a time."}</p></CollapsibleActivity>,
+				});
+				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: guideIcon, node: <>{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}<GuideStepsCard input={input} onDone={(output) => addToolResult({ tool: "guide_steps", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} toolCallId={info.toolCallId} /></> });
 			} else if (info.state === "output-available" && info.input && info.output) {
-				flow.push({ key: info.toolCallId, index, kind: "action", node: <GuideStepsSummary input={info.input as GuideStepsInput} output={info.output as GuideStepsOutput} /> });
+				flow.push({ key: info.toolCallId, index, kind: "action", icon: guideIcon, node: <GuideStepsSummary input={info.input as GuideStepsInput} output={info.output as GuideStepsOutput} /> });
 			}
 			continue;
 		}
 		if (name === "propose_resolution") {
+			const resolutionIcon = <Flag aria-hidden="true" className="size-3.5 shrink-0" />;
 			if (info.state === "input-streaming") {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, node: <p className="text-sm"><ShimmerText>Preparing your summary</ShimmerText></p> });
+				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: resolutionIcon, node: <CollapsibleActivity label="Wrapping up our detective work…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as ResolutionInput;
-				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
+				flow.push({
+					key: `${info.toolCallId}-prepared`,
+					index,
+					kind: "activity",
+					icon: resolutionIcon,
+					node: <CollapsibleActivity label="Troubleshooting wrapped up" />,
+				});
+				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: resolutionIcon, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
 			} else if (info.state === "output-available" && info.input && info.output) {
-				flow.push({ key: info.toolCallId, index, kind: "action", node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
+				flow.push({ key: info.toolCallId, index, kind: "action", icon: resolutionIcon, node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
 			}
 			continue;
 		}
 
-		// Research and any other visible tool: status line first, then
-		// its content (sources) directly underneath, inline in the flow.
+		// Research and any other visible tool: shimmering label while it
+		// runs, then a collapsed row; sources stay inside, closed by
+		// default, until the user opens it.
 		const pending = info.state !== "output-error" && (info.state !== "output-available" || info.preliminary === true);
-		const label = toolLabel(info, pending);
-		const purpose = info.input && typeof info.input === "object" ? (info.input as Record<string, unknown>).purpose ?? (info.input as Record<string, unknown>).focus : null;
-		const activityStatus = typeof purpose === "string" && purpose.trim() ? purpose : label;
-		const output = info.output && typeof info.output === "object" ? info.output as { results?: Array<{url?: string; title?: string}>; error?: string } : {};
-		const results = output.results ?? [];
+		const output = info.output && typeof info.output === "object" ? info.output as { results?: Array<{url?: string; title?: string}>; url?: string; title?: string; error?: string } : {};
+		const results = output.results ?? (output.url ? [{ url: output.url, title: output.title ?? output.url }] : []);
+		const label = toolLabel(info, pending, {
+			resultCount: Array.isArray(output.results) ? output.results.length : null,
+			hasError: Boolean(output.error),
+		});
+		const purpose = info.input && typeof info.input === "object" ? (info.input as Record<string, unknown>).purpose : null;
+		const activityStatus = pending && typeof purpose === "string" && purpose.trim() ? purpose : label;
 		const sources = results.flatMap((source) => {
 			if (!source.url) return [];
 			const element = researchSource(source.url, source.title ?? source.url);
 			return element ? [element] : [];
 		});
-		const resultCount = !pending && Array.isArray(output.results) ? output.results.length : null;
+		const isSearch = ["searchweb", "websearch"].includes(name.toLowerCase().replaceAll("_", ""));
+		const resultCount = !pending && !isSearch && Array.isArray(output.results) ? output.results.length : null;
 		flow.push({
 			key: info.toolCallId,
 			index,
 			kind: "activity",
 			pending,
-			node: <div className="flex min-w-0 flex-col gap-2">
-				<p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-					{toolIcon(info)}
-					<span className="min-w-0 flex-1 truncate">{pending ? <ShimmerText>{activityStatus}</ShimmerText> : activityStatus}</span>
-					{resultCount !== null ? <span className="shrink-0 text-xs tabular-nums">{resultCount} {resultCount === 1 ? "result" : "results"}</span> : null}
-				</p>
-				{sources.length ? <ScrollArea className="h-[150px] w-full rounded-lg border bg-background" scrollbarGutter><div className="px-4 py-2"><ul className="flex flex-col gap-2">{sources.map((source) => <li key={source.key}>{source}</li>)}</ul></div></ScrollArea> : output.error || info.state === "output-error" ? <p className="text-sm text-muted-foreground">Couldn't reach the docs. Continuing with what I know.</p> : pending ? null : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
-			</div>,
+			icon: toolIcon(info) ?? <Globe aria-hidden="true" className="size-3.5 shrink-0" />,
+			node: <CollapsibleActivity
+				hasDetail={!pending}
+				label={activityStatus}
+				meta={resultCount !== null ? `${resultCount} ${resultCount === 1 ? "result" : "results"}` : undefined}
+				pending={pending}
+			>
+				{sources.length ? <ScrollArea className="h-[150px] w-full rounded-lg border bg-background" scrollbarGutter><div className="p-1.5"><ul className="flex flex-col gap-1">{sources.map((source) => <li key={source.key}>{source}</li>)}</ul></div></ScrollArea> : output.error || info.state === "output-error" ? <p className="text-sm text-muted-foreground">Couldn't reach the docs. Continuing with what I know.</p> : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
+			</CollapsibleActivity>,
 		});
 	}
 
@@ -309,17 +466,44 @@ export function AssistantMessage({
 	const firstActionKey = flow.find((item) => item.kind === "action")?.key;
 
 	return (
-		<div className="group flex w-full flex-col gap-3">
-			{flow.map((item) => item.kind === "text"
-				? <ChatMessage key={item.key} isStreaming={isStreaming && item.key === lastTextKey} onRevealComplete={item.key === lastTextKey ? setRevealComplete : undefined} role="assistant" text={item.text ?? ""} />
-				: <div key={item.key} ref={item.key === firstActionKey ? actionTopRef : undefined}>{item.node}</div>)}
-			{showThinkingStatus ? <AssistantStatusMessage mode="thinking" text={statusText} /> : null}
+		<div className="group relative flex w-full flex-col">
+			{flow.length > 1 ? <span aria-hidden="true" className="absolute top-3 bottom-3 left-[13px] w-px bg-border" /> : null}
+			{flow.map((item) => (
+				<motion.div
+					animate={{ opacity: 1, y: 0 }}
+					className="relative flex items-start gap-3 pb-4 last:pb-0"
+					initial={entryArmed ? { opacity: 0, y: 8 } : false}
+					key={item.key}
+					ref={item.key === firstActionKey ? actionTopRef : undefined}
+					transition={{ duration: 0.3, ease: "easeOut" }}
+				>
+					<FlowNode awaitingUser={item.awaitingUser} icon={item.icon} pending={item.pending} />
+					<div className="min-w-0 flex-1">
+						{item.kind === "text"
+							? <div className="pt-0.5"><ChatMessage isStreaming={isStreaming && item.key === lastTextKey} onRevealComplete={item.key === lastTextKey ? setRevealComplete : undefined} role="assistant" text={item.text ?? ""} /></div>
+							: item.node}
+					</div>
+				</motion.div>
+			))}
+			{showThinkingStatus ? (
+				<motion.div
+					animate={{ opacity: 1, y: 0 }}
+					className="relative flex items-start gap-3 pt-1"
+					initial={entryArmed ? { opacity: 0, y: 8 } : false}
+					transition={{ duration: 0.3, ease: "easeOut" }}
+				>
+					<FlowNode pending />
+					<p className="flex min-h-7 items-center text-sm"><ShimmerText>{statusText ?? "Putting on the troubleshooting hat…"}</ShimmerText></p>
+				</motion.div>
+			) : null}
 			{!isStreaming && revealComplete && flow.length > 0 ? (
-				<AssistantMessageActions
-					createdAt={createdAt}
-					onRedo={() => void regenerate({ messageId: message.id })}
-					text={fullText}
-				/>
+				<div className="pl-10">
+					<AssistantMessageActions
+						createdAt={createdAt}
+						onRedo={() => void regenerate({ messageId: message.id })}
+						text={fullText}
+					/>
+				</div>
 			) : null}
 		</div>
 	);

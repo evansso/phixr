@@ -159,8 +159,13 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 	);
 }
 
-export function QuestionnaireAskedStatus({ status }: { status: "submitted" | "skipped" }) {
-	return <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground/60" />{status === "submitted" ? "Questions were asked" : "Questions were skipped"}</p>;
+export function QuestionnaireAskedStatus({ status, count }: { status: "submitted" | "skipped"; count?: number }) {
+	const label = status === "submitted"
+		? count != null
+			? `Questions answered · ${count} ${count === 1 ? "detail" : "details"}`
+			: "Questions answered"
+		: "Questions skipped";
+	return <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground/60" />{label}</p>;
 }
 
 export function QuestionnaireAnswersCard({ title, answers }: { title?: string; answers: Extract<ToolOutput, { status: "submitted" }>['answers'] }) {

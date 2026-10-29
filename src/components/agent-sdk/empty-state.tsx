@@ -47,7 +47,7 @@ export function EmptyState({
 				className
 			)}
 		>
-			{showSidebarTrigger && <SidebarTrigger className="absolute top-2 left-3" />}
+			{showSidebarTrigger && <SidebarTrigger className="absolute top-2 left-3" size="icon-xs" />}
 			<div className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center gap-7 py-8 sm:gap-8">
 				<PhixrIcon className="mx-auto size-9 text-primary" />
 				<h1 className="text-center text-2xl tracking-tight sm:text-[28px]">
