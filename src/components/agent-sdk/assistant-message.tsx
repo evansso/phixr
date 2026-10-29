@@ -9,7 +9,6 @@ import { useChatActions } from "@ai-sdk-tools/store";
 import { ChatMessage } from "#/components/chat/chat-message";
 import { Button } from "#/components/ui/button";
 import { ShimmerText } from "#/components/shimmer-text";
-import { AssistantMessageActions } from "./assistant-message-actions";
 import { QuestionnaireAskedStatus, QuestionnaireCard } from "./questionnaire-card";
 import type { Questionnaire, ToolOutput } from "#/lib/questionnaire/schema";
 import { ResolutionCard, ResolutionSummary } from "./resolution-card";
@@ -202,7 +201,7 @@ export function AssistantStatusMessage({
 			<div aria-label="Agent is responding" className="flex items-start gap-3">
 				<FlowNode pending />
 				<p className="flex min-h-7 items-center text-sm">
-					<ShimmerText>{text ?? "Putting on the troubleshooting hat…"}</ShimmerText>
+					<ShimmerText>{text ?? "Connecting the dots…"}</ShimmerText>
 				</p>
 			</div>
 		);
@@ -233,7 +232,6 @@ export function AssistantStatusMessage({
 
 export function AssistantMessage({
 	message,
-	createdAt,
 	isStreaming,
 	hiddenActionCallIds,
 	questionnaireTurnStatuses,
@@ -248,8 +246,7 @@ export function AssistantMessage({
 	sessionId: string;
 	statusText?: string;
 }) {
-	const { regenerate, addToolResult, sendMessage } = useChatActions();
-	const [revealComplete, setRevealComplete] = useState(!isStreaming);
+	const { addToolResult, sendMessage } = useChatActions();
 	// Entry animation is armed only after the first commit, so steps
 	// already on screen (history) never animate; only steps that appear
 	// while the turn flows in ease in.
@@ -260,10 +257,6 @@ export function AssistantMessage({
 	const actionTopRef = useRef<HTMLDivElement>(null);
 	const previousActionCount = useRef(0);
 
-	useEffect(() => {
-		if (isStreaming) setRevealComplete(false);
-		else setRevealComplete(true);
-	}, [isStreaming]);
 	const isSkillLoader = (part: ActivityPart) =>
 		(part.toolName ?? part.type.replace(/^tool-/, "")).toLowerCase().replaceAll("_", "") === "loadskill";
 	const isSummaryTool = (part: ActivityPart) =>
@@ -458,11 +451,15 @@ export function AssistantMessage({
 	}, [actionCount, isStreaming]);
 
 	const lastFlowItem = flow.at(-1);
+	// Also cover the quiet gap after a text part finishes streaming
+	// (state "done") while the turn is still open: no tool is running
+	// and nothing is visibly happening, so show the status line.
+	const tailPart = parts.at(-1) as { type?: string; state?: string } | undefined;
+	const lastTextFinished = tailPart?.type === "text" && tailPart.state === "done";
 	const showThinkingStatus = isStreaming &&
 		!flow.some((item) => item.pending || item.awaitingUser) &&
-		(!lastFlowItem || lastFlowItem.kind === "activity" || lastFlowItem.kind === "label");
+		(!lastFlowItem || lastFlowItem.kind === "activity" || lastFlowItem.kind === "label" || (lastFlowItem.kind === "text" && lastTextFinished));
 	const lastTextKey = [...flow].reverse().find((item) => item.kind === "text")?.key;
-	const fullText = flow.filter((item) => item.kind === "text").map((item) => item.text ?? "").join("");
 	const firstActionKey = flow.find((item) => item.kind === "action")?.key;
 
 	return (
@@ -480,7 +477,7 @@ export function AssistantMessage({
 					<FlowNode awaitingUser={item.awaitingUser} icon={item.icon} pending={item.pending} />
 					<div className="min-w-0 flex-1">
 						{item.kind === "text"
-							? <div className="pt-0.5"><ChatMessage isStreaming={isStreaming && item.key === lastTextKey} onRevealComplete={item.key === lastTextKey ? setRevealComplete : undefined} role="assistant" text={item.text ?? ""} /></div>
+							? <div className="pt-0.5"><ChatMessage isStreaming={isStreaming && item.key === lastTextKey} role="assistant" text={item.text ?? ""} /></div>
 							: item.node}
 					</div>
 				</motion.div>
@@ -493,17 +490,8 @@ export function AssistantMessage({
 					transition={{ duration: 0.3, ease: "easeOut" }}
 				>
 					<FlowNode pending />
-					<p className="flex min-h-7 items-center text-sm"><ShimmerText>{statusText ?? "Putting on the troubleshooting hat…"}</ShimmerText></p>
+					<p className="flex min-h-7 items-center text-sm"><ShimmerText>{statusText ?? "Connecting the dots…"}</ShimmerText></p>
 				</motion.div>
-			) : null}
-			{!isStreaming && revealComplete && flow.length > 0 ? (
-				<div className="pl-10">
-					<AssistantMessageActions
-						createdAt={createdAt}
-						onRedo={() => void regenerate({ messageId: message.id })}
-						text={fullText}
-					/>
-				</div>
 			) : null}
 		</div>
 	);

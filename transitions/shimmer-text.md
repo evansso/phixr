@@ -26,7 +26,7 @@ follow light / dark mode.
 | `--shimmer-dur` | `2000ms` | sourced from `--p15-dur` |
 | `--shimmer-base` | `#7c7c7c` | sourced from `--p15-base` |
 | `--shimmer-highlight` | `#0d0d0d` | sourced from `--p15-highlight` |
-| `--shimmer-band` | `400%` | sourced from `--p15-band` |
+| `--shimmer-band` | `200%` | sourced from `--p15-band`; wider/softer via `spread` prop |
 | `--shimmer-ease` | `linear` | sourced from `--p15-ease` |
 
 The `:root` defaults below match the live tuning on [transitions.dev](https://transitions.dev). Drop them into your global stylesheet once — every transition in this skill reads from semantic names like these, so multiple transitions can share a single `:root` block.
@@ -36,7 +36,7 @@ The `:root` defaults below match the live tuning on [transitions.dev](https://tr
   --shimmer-dur: 2000ms;
   --shimmer-base: #7c7c7c;
   --shimmer-highlight: #0d0d0d;
-  --shimmer-band: 400%;
+  --shimmer-band: 200%;
   --shimmer-ease: linear;
 }
 ```
@@ -62,11 +62,11 @@ The `:root` defaults below match the live tuning on [transitions.dev](https://tr
   inset: 0;
   pointer-events: none;
   background-image: linear-gradient(
-    90deg,
+    100deg,
     transparent          0%,
-    transparent         40%,
+    color-mix(in srgb, var(--shimmer-highlight) 55%, transparent) 35%,
     var(--shimmer-highlight) 50%,
-    transparent         60%,
+    color-mix(in srgb, var(--shimmer-highlight) 55%, transparent) 65%,
     transparent        100%
   );
   background-size: var(--shimmer-band) 100%;

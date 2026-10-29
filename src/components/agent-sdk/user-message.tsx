@@ -8,7 +8,6 @@ import { Button } from "#/components/ui/button";
 import { Carousel, CarouselItem, CarouselNext, CarouselPrevious, useCarouselNavigation } from "#/components/ui/carousel";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { Textarea } from "#/components/ui/textarea";
-import { UserMessageActions } from "./user-message-actions";
 import { QuestionnaireAnswersCard } from "./questionnaire-card";
 import type { ToolOutput } from "#/lib/questionnaire/schema";
 
@@ -53,11 +52,6 @@ export function UserMessage({
 	useEffect(() => {
 		if (isEditing) editorRef.current?.focus();
 	}, [isEditing]);
-
-	const startEditing = () => {
-		setDraft(text);
-		setIsEditing(true);
-	};
 
 	const cancelEditing = () => {
 		setDraft(text);
@@ -143,12 +137,6 @@ export function UserMessage({
 							{images.length > 1 ? <div className="mt-3 flex items-center justify-between"><CarouselPrevious disabled={!canScrollPrevious} onClick={previous} className="static translate-y-0" /><span className="text-xs text-muted-foreground">Use arrows or swipe to browse</span><CarouselNext disabled={!canScrollNext} onClick={next} className="static translate-y-0" /></div> : null}
 						</DialogContent>
 					</Dialog>
-					<UserMessageActions
-						createdAt={createdAt}
-						disabled={disabled}
-						onEdit={questionnaireAnswers ? undefined : startEditing}
-						text={text}
-					/>
 				</motion.div>
 			)}
 		</div>

@@ -28,9 +28,23 @@ export function statusLine(
 
 	const parts = last?.role === "assistant" ? last.parts : [];
 	const tail = parts.at(-1) as
-		| { type?: string; toolName?: string; input?: unknown }
+		| { type?: string; toolName?: string; state?: string; input?: unknown }
 		| undefined;
-	if (!tail || tail.type === "text") return tail ? null : "Figuring out our next move\u2026";
+	if (!tail) return "Figuring out our next move\u2026";
+	// Text has finished streaming but the turn is still open: the model
+	// is processing what comes next and nothing is visibly happening.
+	if (tail.type === "text") return tail.state === "done" ? "Connecting the dots\u2026" : null;
+	// No tool is running: the last tool already finished (or this is a
+	// bare step/reasoning boundary) and the model is processing what
+	// comes next.
+	if (
+		tail.type === "step-start" ||
+		tail.type === "reasoning" ||
+		tail.state === "output-available" ||
+		tail.state === "output-error"
+	) {
+		return "Connecting the dots\u2026";
+	}
 
 	const name = tail.toolName ?? (tail.type ?? "").replace(/^tool-/, "");
 	const input = tail.input && typeof tail.input === "object"
