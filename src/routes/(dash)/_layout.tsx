@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	Outlet,
+	redirect,
+	useLocation,
+} from "@tanstack/react-router";
 import { getCookie } from "@tanstack/react-start/server";
 import { AgentChat } from "@/components/agent-sdk/agent-chat";
 import { ChatSessionProvider } from "@/components/agent-sdk/chat-session-store";
@@ -11,7 +16,23 @@ const getSidebarDefaultOpen = createServerFn({ method: "GET" }).handler(() => {
 	return getCookie("sidebar_state") !== "false";
 });
 
+const getIsSignedIn = createServerFn({ method: "GET" }).handler(async () => {
+	const { auth } = await import("@clerk/tanstack-react-start/server");
+	const { userId } = await auth();
+	return Boolean(userId);
+});
+
 export const Route = createFileRoute("/(dash)/_layout")({
+	beforeLoad: async ({ location }) => {
+		if (!(await getIsSignedIn())) {
+			throw redirect({
+				params: { _splat: "" },
+				replace: true,
+				search: { redirect_url: location.href },
+				to: "/login/$",
+			});
+		}
+	},
 	loader: () => getSidebarDefaultOpen(),
 	component: DashboardLayout,
 	pendingComponent: () => (
