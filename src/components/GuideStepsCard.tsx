@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/tanstack-react-start";
-import { Check, Circle, Copy } from "lucide-react";
+import { Check, ChevronDown, Circle, Copy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -47,6 +47,8 @@ export function GuideStepsCard({ sessionId, toolCallId, input, onDone }: {
 	const [pastedOutput, setPastedOutput] = useState("");
 	const [helpOpen, setHelpOpen] = useState(false);
 	const [helpText, setHelpText] = useState("");
+	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [outputOpen, setOutputOpen] = useState(false);
 	const [confirmedDestructive, setConfirmedDestructive] = useState(false);
 	const [loadingResults, setLoadingResults] = useState(true);
 	const [busy, setBusy] = useState(true);
@@ -95,14 +97,6 @@ export function GuideStepsCard({ sessionId, toolCallId, input, onDone }: {
 		return () => { active = false; };
 	}, [apiPath, getToken, input.steps]);
 
-	useEffect(() => {
-		const focusIfEmpty = () => {
-			if (activeStep?.capture !== "none" && !pastedOutput && document.activeElement !== pasteRef.current) pasteRef.current?.focus();
-		};
-		window.addEventListener("focus", focusIfEmpty);
-		return () => window.removeEventListener("focus", focusIfEmpty);
-	}, [activeStep?.capture, pastedOutput]);
-
 	const finish = useCallback(async (resultList: SavedResult[], stoppedReason: GuideStepsOutput["stoppedReason"]) => {
 		try {
 			await onDone({ results: resultList, stoppedReason });
@@ -132,6 +126,8 @@ export function GuideStepsCard({ sessionId, toolCallId, input, onDone }: {
 				setPastedOutput("");
 				setHelpOpen(false);
 				setHelpText("");
+				setDetailsOpen(false);
+				setOutputOpen(false);
 				setConfirmedDestructive(false);
 				setBusy(false);
 				return;
@@ -170,7 +166,7 @@ export function GuideStepsCard({ sessionId, toolCallId, input, onDone }: {
 	return (
 		<section aria-label="Troubleshooting guide" className="w-full max-w-[45rem] rounded-2xl border bg-popover p-4 text-popover-foreground shadow-sm sm:p-5">
 			<header className="mb-4 border-b pb-3">
-				<div className="text-xs font-medium text-muted-foreground">{input.steps.length > 1 ? `Step ${stepIndex + 1} of ${input.steps.length}` : "Troubleshooting guide"}</div>
+				<div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Current step{input.steps.length > 1 ? ` · ${stepIndex + 1} of ${input.steps.length}` : ""}</div>
 				<p className="mt-1 text-xs text-muted-foreground">{input.planNote || "Likely path. May change based on your results."}</p>
 			</header>
 			{completed.length > 0 && <ol className="mb-4 flex flex-col divide-y rounded-lg border">{completed.map(({ step, result }) => <li className="flex min-w-0 items-center gap-2 px-3 py-2 text-xs" key={step.id}>
@@ -188,8 +184,11 @@ export function GuideStepsCard({ sessionId, toolCallId, input, onDone }: {
 					<div className="flex min-w-0 items-center rounded-lg bg-muted/70"><pre className="min-w-0 flex-1 overflow-x-auto px-3 py-2 text-xs"><code className="whitespace-pre">{command.command}</code></pre><Button aria-label={`Copy ${command.label}`} className="mr-1" onClick={() => void copyCommand(`${index}`, command.command)} size="xs" type="button" variant="ghost">{copied === `${index}` ? "Copied" : <Copy className="size-3.5" />}</Button></div>
 					{command.risk !== "read_only" && command.undo && <p className="mt-1 text-xs text-muted-foreground">To undo: {command.undo}</p>}
 				</div>)}</div> : null}
-				<div className="border-l-2 pl-3 text-sm"><h4 className="mb-1 text-xs font-medium">You should see</h4><p className="text-muted-foreground">{activeStep.expected.success}</p>{activeStep.expected.failureSigns?.length ? <><h4 className="mb-1 mt-3 text-xs font-medium">If you see this instead</h4><ul className="list-disc space-y-1 pl-5 text-muted-foreground">{activeStep.expected.failureSigns.map((sign) => <li key={sign}>{sign}</li>)}</ul></> : null}</div>
-				{activeStep.capture !== "none" && <div><label className="mb-1.5 block text-xs font-medium" htmlFor={`guide-output-${toolCallId}`}>{activeStep.capturePrompt || "Paste what you see"}{activeStep.capture === "optional" ? " (optional)" : ""}</label><Textarea ref={pasteRef} className="min-h-24 max-h-56 font-mono text-xs" id={`guide-output-${toolCallId}`} maxLength={10000} onChange={(event) => setPastedOutput(event.target.value)} placeholder="Paste output here" value={pastedOutput} /><div className="mt-1 flex justify-between gap-2 text-[11px] text-muted-foreground"><span>Remove passwords and tokens before pasting.</span><span className="shrink-0 tabular-nums">{pastedOutput.length}/10000</span></div></div>}
+				<div className="text-sm">
+					<button aria-expanded={detailsOpen} className="flex min-h-7 items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground" onClick={() => setDetailsOpen((value) => !value)} type="button">What you should see<ChevronDown aria-hidden="true" className={`size-3.5 transition-transform duration-200 ${detailsOpen ? "rotate-180" : ""}`} /></button>
+					{detailsOpen && <div className="mt-1.5 border-l-2 pl-3"><p className="text-muted-foreground">{activeStep.expected.success}</p>{activeStep.expected.failureSigns?.length ? <><h4 className="mb-1 mt-3 text-xs font-medium">If you see this instead</h4><ul className="list-disc space-y-1 pl-5 text-muted-foreground">{activeStep.expected.failureSigns.map((sign) => <li key={sign}>{sign}</li>)}</ul></> : null}</div>}
+				</div>
+				{activeStep.capture !== "none" && (outputOpen || outcome ? <div><label className="mb-1.5 block text-xs font-medium" htmlFor={`guide-output-${toolCallId}`}>{activeStep.capturePrompt || "Paste what you see"}{activeStep.capture === "optional" ? " (optional)" : ""}</label><Textarea ref={pasteRef} className="min-h-24 max-h-56 font-mono text-xs" id={`guide-output-${toolCallId}`} maxLength={10000} onChange={(event) => setPastedOutput(event.target.value)} placeholder="Paste output here" value={pastedOutput} /><div className="mt-1 flex justify-between gap-2 text-[11px] text-muted-foreground"><span>Remove passwords and tokens before pasting.</span><span className="shrink-0 tabular-nums">{pastedOutput.length}/10000</span></div></div> : <button className="self-start text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" onClick={() => setOutputOpen(true)} type="button">{activeStep.capture === "required" ? "Add what you saw" : "Add what you saw (optional)"}</button>)}
 				<fieldset><legend className="mb-2 text-xs font-medium">Report back</legend><div className="grid grid-cols-2 gap-2">{outcomeOptions.map(([value, label]) => <Button aria-pressed={outcome === value && !helpIsSubmitted} className="h-auto min-h-9 whitespace-normal px-2 py-2 text-xs" key={value} onClick={() => { setOutcome(value); setHelpOpen(false); }} type="button" variant={outcome === value && !helpIsSubmitted ? "secondary" : "outline"}><Circle className={`mr-1.5 size-3 shrink-0 ${outcome === value && !helpIsSubmitted ? "fill-current" : ""}`} />{label}</Button>)}</div></fieldset>
 				{helpOpen && <Textarea aria-label="What's unclear?" maxLength={500} onChange={(event) => setHelpText(event.target.value)} placeholder="What's unclear?" value={helpText} />}
 				<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs"><button className="text-primary underline-offset-4 hover:underline" onClick={() => { setHelpOpen(!helpOpen); setOutcome(null); }} type="button">I need help with this step</button><button className="text-muted-foreground underline-offset-4 hover:underline" onClick={() => void finish(results, "user_skipped")} type="button">Skip this guide</button></div>

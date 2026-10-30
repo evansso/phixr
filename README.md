@@ -24,7 +24,7 @@ Instead of dumping a long list of possible fixes, Phixr works like a careful tec
 | Server | [Nitro](https://nitro.build/) (deployable to Vercel or any Node-compatible host) |
 | Database / backend | [Convex](https://convex.dev/) |
 | Auth | [Clerk](https://clerk.com/) |
-| AI | Vercel AI SDK streaming chat, Meta Muse model via Baseten (`meta-models/muse-spark-open-1026`); in development, Meta Responses API directly (`muse-wonder-1.0`) |
+| AI | Vercel AI SDK streaming chat, Meta Muse model (`muse-wonder-1.0`) via Meta Responses API |
 | Research | [Exa](https://exa.ai/) search + page fetching |
 | File uploads | Upstash Blob (direct browser uploads via signed URLs) |
 | Speech | Deepgram (voice input tokens) |
@@ -55,8 +55,7 @@ Copy `.env.example` to `.env` and set:
 | `VITE_CONVEX_SITE_URL` | Your Convex site URL |
 | `CONVEX_DEPLOYMENT` | Convex deployment name (set by `convex dev`) |
 | `CONVEX_DEPLOY_KEY` | Convex deploy key (server only) |
-| `BASETEN_API_KEY` | Baseten API key for the chat model (production) |
-| `MUSE_META_API_KEY` | Meta AI API key for the chat model (development only) |
+| `MUSE_META_API_KEY` | Meta AI API key for the chat model |
 | `EXA_API_KEY` | Exa API key for web research |
 | `UPSTASH_BLOB_TOKEN` | Token for a **public** Upstash Blob bucket (image uploads) |
 | `DEEPGRAM_API_KEY` | Deepgram key for voice input |

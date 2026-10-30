@@ -160,7 +160,7 @@ function toolLabel(part: ActivityPart, pending: boolean, completed?: { resultCou
 		const count = completed?.resultCount;
 		if (count === 0) return "No useful sources found";
 		return count != null
-			? `Found ${count} useful ${count === 1 ? "source" : "sources"}`
+			? `Checked ${count} ${count === 1 ? "source" : "sources"}`
 			: "Looked for clues";
 	}
 	if (normalizedName === "fetchpage" || normalizedName === "webfetch") {
@@ -271,6 +271,33 @@ export function AssistantMessage({
 	});
 	const shownQuestionnaires = new Set<string>();
 
+	// Consecutive research calls are one journey step, not a row per
+	// call. Group them (ignoring step boundaries between them) so two
+	// searches in a row collapse into a single "Checked N sources" node
+	// whose detail lists each distinct purpose and the deduped sources.
+	const researchNameOf = (part: ActivityPart) => (part.toolName ?? part.type.replace(/^tool-/, "")).toLowerCase().replaceAll("_", "");
+	const isResearchPart = (part: (typeof parts)[number]) => ["searchweb", "websearch", "fetchpage", "webfetch"].includes(researchNameOf(part)) && (isToolUIPart(part) || (part.type as string) === "dynamic-tool");
+	const researchGroups = new Map<string, typeof parts>();
+	const researchGroupedAway = new Set<string>();
+	{
+		let current: typeof parts = [];
+		const flush = () => {
+			if (current.length) {
+				const first = current[0] as ActivityPart & { toolCallId: string };
+				researchGroups.set(first.toolCallId, current);
+				for (const member of current.slice(1)) researchGroupedAway.add((member as ActivityPart & { toolCallId: string }).toolCallId);
+			}
+			current = [];
+		};
+		for (const part of parts) {
+			if (part.type === "step-start" || part.type === "reasoning") continue;
+			if (isResearchPart(part)) { current.push(part); continue; }
+			if (part.type === "text" && !part.text) continue;
+			flush();
+		}
+		flush();
+	}
+
 	// One timeline, in the order the model produced it: a node on the
 	// left rail per step — streamed text, tool activity, then the next
 	// text or card. Live steps shimmer; finished activities collapse to
@@ -344,15 +371,6 @@ export function AssistantMessage({
 				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: questionnaireIcon, node: <CollapsibleActivity label="Let's narrow this down…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as Questionnaire;
-				// The preparing step collapses shut, then the card itself
-				// becomes the next, ringed step on the rail.
-				flow.push({
-					key: `${info.toolCallId}-prepared`,
-					index,
-					kind: "activity",
-					icon: questionnaireIcon,
-					node: <CollapsibleActivity hasDetail label="Prepared questions" meta={`${input.questions.length} ${input.questions.length === 1 ? "question" : "questions"}`}><p className="text-xs leading-relaxed text-muted-foreground">{input.questions.length} {input.questions.length === 1 ? "question" : "questions"} ready below.</p></CollapsibleActivity>,
-				});
 				flow.push({
 					key: info.toolCallId,
 					index,
@@ -373,13 +391,6 @@ export function AssistantMessage({
 				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: guideIcon, node: <CollapsibleActivity label="Turning clues into a game plan…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as GuideStepsInput;
-				flow.push({
-					key: `${info.toolCallId}-prepared`,
-					index,
-					kind: "activity",
-					icon: guideIcon,
-					node: <CollapsibleActivity hasDetail label="Your next step is ready" meta={`${input.steps.length} ${input.steps.length === 1 ? "step" : "steps"}`}><p className="text-xs leading-relaxed text-muted-foreground">{input.planNote || "Follow the guide below, one step at a time."}</p></CollapsibleActivity>,
-				});
 				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: guideIcon, node: <>{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}<GuideStepsCard input={input} onDone={(output) => addToolResult({ tool: "guide_steps", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} toolCallId={info.toolCallId} /></> });
 			} else if (info.state === "output-available" && info.input && info.output) {
 				flow.push({ key: info.toolCallId, index, kind: "action", icon: guideIcon, node: <GuideStepsSummary input={info.input as GuideStepsInput} output={info.output as GuideStepsOutput} /> });
@@ -392,13 +403,6 @@ export function AssistantMessage({
 				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: resolutionIcon, node: <CollapsibleActivity label="Wrapping up our detective work…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as ResolutionInput;
-				flow.push({
-					key: `${info.toolCallId}-prepared`,
-					index,
-					kind: "activity",
-					icon: resolutionIcon,
-					node: <CollapsibleActivity label="Troubleshooting wrapped up" />,
-				});
 				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: resolutionIcon, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
 			} else if (info.state === "output-available" && info.input && info.output) {
 				flow.push({ key: info.toolCallId, index, kind: "action", icon: resolutionIcon, node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
@@ -406,25 +410,44 @@ export function AssistantMessage({
 			continue;
 		}
 
-		// Research and any other visible tool: shimmering label while it
-		// runs, then a collapsed row; sources stay inside, closed by
-		// default, until the user opens it.
-		const pending = info.state !== "output-error" && (info.state !== "output-available" || info.preliminary === true);
-		const output = info.output && typeof info.output === "object" ? info.output as { results?: Array<{url?: string; title?: string}>; url?: string; title?: string; error?: string } : {};
-		const results = output.results ?? (output.url ? [{ url: output.url, title: output.title ?? output.url }] : []);
-		const label = toolLabel(info, pending, {
-			resultCount: Array.isArray(output.results) ? output.results.length : null,
-			hasError: Boolean(output.error),
-		});
-		const purpose = info.input && typeof info.input === "object" ? (info.input as Record<string, unknown>).purpose : null;
-		const activityStatus = pending && typeof purpose === "string" && purpose.trim() ? purpose : label;
-		const sources = results.flatMap((source) => {
-			if (!source.url) return [];
-			const element = researchSource(source.url, source.title ?? source.url);
-			return element ? [element] : [];
-		});
-		const isSearch = ["searchweb", "websearch"].includes(name.toLowerCase().replaceAll("_", ""));
-		const resultCount = !pending && !isSearch && Array.isArray(output.results) ? output.results.length : null;
+		// Research (grouped when consecutive) and any other visible
+		// tool: shimmering label while it runs, then one collapsed row;
+		// purposes and sources stay inside until the user opens it.
+		if (researchGroupedAway.has(info.toolCallId)) continue;
+		const members = researchGroups.get(info.toolCallId) ?? [part];
+		const isResearchGroup = members.length > 1 || isResearchPart(part);
+		const memberPending = (member: ActivityPart) => member.state !== "output-error" && (member.state !== "output-available" || member.preliminary === true);
+		const pending = members.some((member) => memberPending(member as ActivityPart));
+		const seenUrls = new Set<string>();
+		const sources: ReactNode[] = [];
+		const purposes: string[] = [];
+		let hasError = false;
+		for (const member of members) {
+			const m = member as ActivityPart;
+			const mOutput = m.output && typeof m.output === "object" ? m.output as { results?: Array<{ url?: string; title?: string }>; url?: string; title?: string; error?: string } : {};
+			if (mOutput.error || m.state === "output-error") hasError = true;
+			const mPurpose = m.input && typeof m.input === "object" ? (m.input as Record<string, unknown>).purpose : null;
+			const purposeText = typeof mPurpose === "string" && mPurpose.trim() ? mPurpose.trim() : toolLabel(m, false);
+			if (!purposes.includes(purposeText)) purposes.push(purposeText);
+			const mResults = mOutput.results ?? (mOutput.url ? [{ url: mOutput.url, title: mOutput.title ?? mOutput.url }] : []);
+			for (const source of mResults) {
+				if (!source.url || seenUrls.has(source.url)) continue;
+				seenUrls.add(source.url);
+				const element = researchSource(source.url, source.title ?? source.url);
+				if (element) sources.push(element);
+			}
+		}
+		const firstPending = members.find((member) => memberPending(member as ActivityPart)) as ActivityPart | undefined;
+		const pendingPurpose = firstPending?.input && typeof firstPending.input === "object" ? (firstPending.input as Record<string, unknown>).purpose : null;
+		const label = !isResearchGroup
+			? toolLabel(info, pending)
+			: pending
+				? typeof pendingPurpose === "string" && pendingPurpose.trim() ? pendingPurpose : "Looking for clues…"
+				: hasError && sources.length === 0
+					? "Couldn't look for clues"
+					: sources.length === 0
+						? "No useful sources found"
+						: `Checked ${sources.length} ${sources.length === 1 ? "source" : "sources"}`;
 		flow.push({
 			key: info.toolCallId,
 			index,
@@ -433,11 +456,14 @@ export function AssistantMessage({
 			icon: toolIcon(info) ?? <Globe aria-hidden="true" className="size-3.5 shrink-0" />,
 			node: <CollapsibleActivity
 				hasDetail={!pending}
-				label={activityStatus}
-				meta={resultCount !== null ? `${resultCount} ${resultCount === 1 ? "result" : "results"}` : undefined}
+				label={label}
+				meta={isResearchGroup && members.length > 1 ? `${members.length} checks` : undefined}
 				pending={pending}
 			>
-				{sources.length ? <ScrollArea className="h-[150px] w-full rounded-lg border bg-background" scrollbarGutter><div className="p-1.5"><ul className="flex flex-col gap-1">{sources.map((source) => <li key={source.key}>{source}</li>)}</ul></div></ScrollArea> : output.error || info.state === "output-error" ? <p className="text-sm text-muted-foreground">Couldn't reach the docs. Continuing with what I know.</p> : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
+				<div className="flex flex-col gap-2">
+					{purposes.length ? <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">{purposes.map((purpose) => <li key={purpose}>{purpose}</li>)}</ul> : null}
+					{sources.length ? <ScrollArea className="h-[150px] w-full rounded-lg border bg-background" scrollbarGutter><div className="p-1.5"><ul className="flex flex-col gap-1">{sources.map((source, sourceIndex) => <li key={(source as { key?: string })?.key ?? sourceIndex}>{source}</li>)}</ul></div></ScrollArea> : hasError ? <p className="text-sm text-muted-foreground">Couldn&apos;t reach the docs. Continuing with what I know.</p> : <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">No sources found.</div>}
+				</div>
 			</CollapsibleActivity>,
 		});
 	}

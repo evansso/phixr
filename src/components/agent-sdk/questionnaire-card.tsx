@@ -9,10 +9,11 @@ import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/lib/toast";
 import type { AnswerInput, PersistedAnswerMessage, Question, Questionnaire, ToolOutput } from "#/lib/questionnaire/schema";
 
-type Draft = { selected: string[]; otherOn: boolean; otherText: string; text: string; yes?: boolean };
+type Draft = { selected: string[]; otherOn: boolean; otherText: string; text: string; yes?: boolean; unsure?: boolean };
 const empty: Draft = { selected: [], otherOn: false, otherText: "", text: "" };
 
 function isAnswered(q: Question, d: Draft) {
+	if (d.unsure) return true;
 	switch (q.type) {
 		case "single_choice": case "multi_choice": return d.selected.length > 0 || (d.otherOn && d.otherText.trim().length > 0);
 		case "yes_no": return d.yes !== undefined || d.otherText.trim().length > 0;
@@ -21,7 +22,7 @@ function isAnswered(q: Question, d: Draft) {
 }
 
 function toAnswer(q: Question, d: Draft): AnswerInput {
-	if (!isAnswered(q, d)) return { questionId: q.id, skipped: true };
+	if (d.unsure || !isAnswered(q, d)) return { questionId: q.id, skipped: true };
 	switch (q.type) {
 		case "single_choice": case "multi_choice": return { questionId: q.id, skipped: false, selected: d.selected, otherText: d.otherOn ? d.otherText.trim() : undefined };
 		case "yes_no": return { questionId: q.id, skipped: false, yes: d.yes, otherText: d.otherText.trim() || undefined };
@@ -36,7 +37,7 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 	const [direction, setDirection] = useState(1);
 	const [busy, setBusy] = useState(false);
 	const get = (id: string) => drafts[id] ?? empty;
-	const patch = (id: string, change: Partial<Draft>) => setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] ?? empty), ...change } }));
+	const patch = (id: string, change: Partial<Draft>) => setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] ?? empty), unsure: false, ...change } }));
 	const question = input.questions[step];
 	const currentDraft = question ? get(question.id) : empty;
 	const canContinue = question?.required === false || (question ? isAnswered(question, currentDraft) : false);
@@ -87,6 +88,7 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 				</div>
 				<div className="mt-0.5 shrink-0 text-xs tabular-nums text-muted-foreground" aria-label={`Question ${step + 1} of ${input.questions.length}`}>{step + 1} of {input.questions.length}</div>
 			</div>
+			<div aria-hidden="true" className="mb-3 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary/70 transition-[width] duration-300" style={{ width: `${((step + 1) / input.questions.length) * 100}%` }} /></div>
 
 			<AnimatePresence custom={direction} initial={false} mode="wait">
 				<motion.div
@@ -147,8 +149,10 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 				</motion.div>
 			</AnimatePresence>
 
+			<button aria-pressed={Boolean(currentDraft.unsure)} className={`mt-2.5 text-xs underline-offset-4 hover:underline ${currentDraft.unsure ? "font-medium text-foreground" : "text-muted-foreground"}`} disabled={busy} onClick={() => patch(question.id, { unsure: !currentDraft.unsure, selected: [], otherOn: false, otherText: "", text: "", yes: undefined })} type="button">I&apos;m not sure</button>
+
 			<div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5">
-				<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void persist("skipped")}>Skip</Button>
+				<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void persist("skipped")}>Skip all</Button>
 				<div className="flex gap-2">
 					<Button type="button" size="sm" variant="ghost" disabled={step === 0 || busy} onClick={() => goTo(step - 1)}>Back</Button>
 					{step < input.questions.length - 1 && <Button type="button" size="sm" disabled={!canContinue || busy} onClick={() => goTo(step + 1)}>Next</Button>}
@@ -168,11 +172,10 @@ export function QuestionnaireAskedStatus({ status, count }: { status: "submitted
 	return <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground/60" />{label}</p>;
 }
 
-export function QuestionnaireAnswersCard({ title, answers }: { title?: string; answers: Extract<ToolOutput, { status: "submitted" }>['answers'] }) {
-	return <section aria-label="Your answers" className="w-full rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
-		<div className="mb-3 flex items-baseline justify-between gap-3 border-b pb-2.5">
-			<div className="min-w-0"><h3 className="text-sm font-medium">{title || "Your answers"}</h3>{title ? <p className="mt-0.5 text-xs text-muted-foreground">Your answers</p> : null}</div>
-			<span className="shrink-0 text-xs tabular-nums text-muted-foreground">{answers.length} {answers.length === 1 ? "answer" : "answers"}</span>
+export function QuestionnaireAnswersCard({ answers }: { title?: string; answers: Extract<ToolOutput, { status: "submitted" }>['answers'] }) {
+	return <section aria-label="Questions" className="w-full rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
+		<div className="mb-3 border-b pb-2.5">
+			<h3 className="text-sm font-medium">Questions</h3>
 		</div>
 		<dl className="flex flex-col gap-3">
 			{answers.map((answer) => <div className="flex flex-col gap-0.5" key={answer.questionId}>
