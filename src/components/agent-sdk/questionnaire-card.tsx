@@ -78,32 +78,33 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 			aria-label={input.title ?? "Questionnaire"}
 			className="max-h-[min(68vh,38rem)] overflow-y-auto rounded-2xl border bg-popover p-3 text-popover-foreground sm:p-3.5"
 			layout
-			transition={{ layout: { type: "spring", stiffness: 360, damping: 34 } }}
+			transition={{ layout: { type: "spring", stiffness: 260, damping: 30 } }}
 		>
 			<div className="mb-3 flex items-start justify-between gap-4">
 				<div className="min-w-0">
-					{input.title && <h3 className="mb-1 text-xs font-medium text-muted-foreground">{input.title}</h3>}
-					<p className="text-sm font-medium leading-relaxed">{question.prompt}{question.required === false && <span className="text-muted-foreground"> (optional)</span>}</p>
-					{question.hint && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{question.hint}</p>}
+					{input.title && <h3 className="text-xs font-medium text-muted-foreground">{input.title}</h3>}
 				</div>
 				<div className="mt-0.5 shrink-0 text-xs tabular-nums text-muted-foreground" aria-label={`Question ${step + 1} of ${input.questions.length}`}>{step + 1} of {input.questions.length}</div>
 			</div>
 			<div aria-hidden="true" className="mb-3 h-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary/70 transition-[width] duration-300" style={{ width: `${((step + 1) / input.questions.length) * 100}%` }} /></div>
 
+			<div className="relative overflow-hidden">
 			<AnimatePresence custom={direction} initial={false} mode="wait">
 				<motion.div
 					key={question.id}
+					className="min-w-0"
 					custom={direction}
-					drag="x"
-					dragConstraints={{ left: 0, right: 0 }}
-					dragElastic={0.18}
-					onDragEnd={handleSwipe}
+					onPanEnd={handleSwipe}
 					style={{ touchAction: "pan-y" }}
-					initial={(slideDirection: number) => ({ opacity: 0, x: slideDirection > 0 ? 28 : -28 })}
+					initial={(slideDirection: number) => ({ opacity: 0, x: slideDirection >= 0 ? 24 : -24 })}
 					animate={{ opacity: 1, x: 0 }}
-					exit={(slideDirection: number) => ({ opacity: 0, x: slideDirection > 0 ? -28 : 28 })}
-					transition={{ duration: 0.2, ease: "easeOut" }}
+					exit={(slideDirection: number) => ({ opacity: 0, x: slideDirection >= 0 ? -16 : 16 })}
+					transition={{ duration: 0.16, ease: "easeOut" }}
 				>
+					<div className="mb-3">
+						<p className="text-sm font-medium leading-relaxed">{question.prompt}{question.required === false && <span className="text-muted-foreground"> (optional)</span>}</p>
+						{question.hint && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{question.hint}</p>}
+					</div>
 					<fieldset className="flex flex-col gap-2.5">
 						<legend className="sr-only">{question.prompt}</legend>
 						{(question.type === "single_choice" || question.type === "multi_choice") && <>
@@ -146,10 +147,10 @@ export function QuestionnaireCard({ sessionId, toolCallId, input, onDone }: { se
 						</>}
 						{question.type === "text" && <Textarea value={currentDraft.text} onChange={(event) => patch(question.id, { text: event.target.value })} placeholder={question.placeholder} maxLength={2000} />}
 					</fieldset>
+					<button aria-pressed={Boolean(currentDraft.unsure)} className={`mt-2.5 text-xs underline-offset-4 hover:underline ${currentDraft.unsure ? "font-medium text-foreground" : "text-muted-foreground"}`} disabled={busy} onClick={() => patch(question.id, { unsure: !currentDraft.unsure, selected: [], otherOn: false, otherText: "", text: "", yes: undefined })} type="button">I&apos;m not sure</button>
 				</motion.div>
 			</AnimatePresence>
-
-			<button aria-pressed={Boolean(currentDraft.unsure)} className={`mt-2.5 text-xs underline-offset-4 hover:underline ${currentDraft.unsure ? "font-medium text-foreground" : "text-muted-foreground"}`} disabled={busy} onClick={() => patch(question.id, { unsure: !currentDraft.unsure, selected: [], otherOn: false, otherText: "", text: "", yes: undefined })} type="button">I&apos;m not sure</button>
+			</div>
 
 			<div className="mt-3 flex items-center justify-between gap-2 border-t pt-2.5">
 				<Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void persist("skipped")}>Skip all</Button>

@@ -392,10 +392,7 @@ export function AgentChatInput({
 					</Reorder.Group>
 				) : null}
 				{uploadNotice ? <p aria-live="polite" className="px-3 pt-1 text-xs text-destructive">{uploadNotice}</p> : null}
-				<div className="relative">
-					{dictationText || interim ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 whitespace-pre-wrap wrap-anywhere px-[calc(--spacing(3)-1px)] py-1 text-base text-muted-foreground/65 md:text-sm"><span className="invisible">{getComposerText(value)}{getComposerText(value) ? " " : ""}</span>{[dictationText, interim].filter(Boolean).join(" ")}</div> : null}
-					<ComposerInput aria-label={placeholder} className={dictationText || interim ? "text-transparent caret-foreground" : ""} placeholder={listening ? (dictationText || interim ? "" : "Listening...") : placeholder} ref={inputRef} />
-				</div>
+				<ComposerInput aria-label={placeholder} ghost={dictationText || interim ? { text: getComposerText(value), finalText: dictationText, interimText: interim } : undefined} placeholder={listening ? (dictationText || interim ? "" : "Listening...") : placeholder} ref={inputRef} />
 				<ComposerActions>
 					{listening ? (
 						<div aria-label="Voice recorder" className="flex w-full min-w-0 items-center gap-3 px-1" role="group">

@@ -93,7 +93,7 @@ function CollapsibleActivity({
 		<div className="min-w-0">
 			<button
 				aria-expanded={open}
-				className="flex min-h-7 w-full items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+				className="flex min-h-7 w-full cursor-pointer items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
 				onClick={() => setOpen((value) => !value)}
 				type="button"
 			>

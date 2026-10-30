@@ -11,6 +11,7 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   type ComposerEditorOptions,
@@ -45,6 +46,20 @@ type ComposerLayout = "stacked" | "adaptive";
 type ComposerTokenVariant = "default" | "chip";
 const composerTokenClassName =
   "wrap-break-word inline cursor-default align-baseline font-normal text-primary data-[variant=default]:font-medium data-[variant=chip]:box-decoration-clone data-[variant=chip]:rounded-md data-[variant=chip]:bg-accent data-[variant=chip]:px-1.5 data-[variant=chip]:py-px data-[variant=chip]:text-accent-foreground [&_[data-slot=composer-token-icon]:empty]:hidden [&_[data-slot=composer-token-icon]>svg]:size-3.5";
+
+// Shared by the real input, the ghost mirror, and its sizer so all three
+// wrap and measure identically.
+const composerInputTextClassName =
+  "field-sizing-content wrap-anywhere relative block min-h-[calc(var(--composer-min-rows,1)*1lh+--spacing(2))] w-full min-w-0 resize-none whitespace-pre-wrap border-0 bg-transparent in-[[data-layout=adaptive]:not([data-multiline])]:px-1 px-[calc(--spacing(3)-1px)] py-1 outline-none placeholder:text-muted-foreground/72 data-empty:before:pointer-events-none data-empty:before:absolute data-empty:before:text-muted-foreground/72 data-empty:before:content-[attr(data-placeholder)] md:in-data-[layout=adaptive]:min-h-[calc(var(--composer-min-rows,1)*1lh+--spacing(2))] md:min-h-[calc(var(--composer-min-rows,2)*1lh+--spacing(2))]";
+
+export type ComposerGhost = {
+  /** Text already in the input. Rendered invisibly to reserve its space. */
+  text: string;
+  /** Settled ghost text, rendered more prominently than `interimText`. */
+  finalText?: string;
+  /** Still-changing ghost text, rendered dimmed and italic. */
+  interimText?: string;
+};
 
 function ComposerFrame({
   className,
@@ -147,12 +162,14 @@ export function ComposerInput({
   className,
   placeholder,
   renderToken,
+  ghost,
   render,
   ref,
   ...props
 }: useRender.ComponentProps<"div"> & {
   placeholder?: string;
   renderToken?: (token: ComposerTokenPart) => ReactNode;
+  ghost?: ComposerGhost;
 }): ReactElement {
   const editor = useComposerEditorContext();
   const suggestions = useComposerSuggestionsContext();
@@ -160,6 +177,39 @@ export function ComposerInput({
   const { scrollRef, inputRef: layoutInputRef } = useComposerInputLayout();
   const textarea = editor?.isTextarea ?? false;
   const { ref: editorRef, ...editorProps } = editor?.inputProps ?? {};
+  const ghostFinal = ghost?.finalText ?? "";
+  const ghostInterim = ghost?.interimText ?? "";
+  const ghostSuffix = [ghostFinal, ghostInterim].filter(Boolean).join(" ");
+  const ghostActive = Boolean(ghost && ghostSuffix);
+  const ghostPrefix = ghostActive
+    ? `${ghost?.text ?? ""}${ghost?.text && ghostSuffix ? " " : ""}`
+    : "";
+  const ghostContent = ghostActive ? (
+    <>
+      <span className="invisible">{ghostPrefix}</span>
+      {ghostFinal ? (
+        <span className="text-muted-foreground/70">
+          {ghostFinal}
+          {ghostInterim ? " " : ""}
+        </span>
+      ) : null}
+      {ghostInterim ? (
+        <span className="text-muted-foreground/45 italic">{ghostInterim}</span>
+      ) : null}
+      {"\u200b"}
+    </>
+  ) : null;
+  // Keep the newest ghost text in view as dictation grows past max rows.
+  useEffect(() => {
+    if (!ghostActive) return;
+    const frame = requestAnimationFrame(() => {
+      const viewport = scrollRef.current?.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]',
+      );
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ghostActive, ghostSuffix, scrollRef]);
   const defaultProps = {
     "data-slot": "composer-input",
     ...(render === undefined
@@ -171,12 +221,15 @@ export function ComposerInput({
         }
       : {}),
     "data-empty":
-      !textarea && editor?.isEmpty && !editor.isComposing ? "" : undefined,
+      !textarea && editor?.isEmpty && !editor.isComposing && !ghostActive
+        ? ""
+        : undefined,
     ...(textarea ? { placeholder } : {}),
     "data-placeholder": placeholder,
     "aria-placeholder": editor ? placeholder : undefined,
     className: cn(
-      "field-sizing-content wrap-anywhere relative block min-h-[calc(var(--composer-min-rows,1)*1lh+--spacing(2))] w-full min-w-0 resize-none whitespace-pre-wrap border-0 bg-transparent in-[[data-layout=adaptive]:not([data-multiline])]:px-1 px-[calc(--spacing(3)-1px)] py-1 outline-none placeholder:text-muted-foreground/72 data-empty:before:pointer-events-none data-empty:before:absolute data-empty:before:text-muted-foreground/72 data-empty:before:content-[attr(data-placeholder)] md:in-data-[layout=adaptive]:min-h-[calc(var(--composer-min-rows,1)*1lh+--spacing(2))] md:min-h-[calc(var(--composer-min-rows,2)*1lh+--spacing(2))]",
+      composerInputTextClassName,
+      ghostActive && "absolute inset-0 h-full text-transparent caret-foreground",
       className,
     ),
   };
@@ -208,7 +261,33 @@ export function ComposerInput({
         overscrollContain
         scrollFade
       >
-        {input}
+        {ghostActive ? (
+          <div className="relative w-full" data-slot="composer-ghost-root">
+            {/* In-flow sizer: identical text/metrics to the ghost, so the
+                scroll area, max-height, and multiline layout grow with the
+                ghost text instead of the (shorter) real input content. */}
+            <div
+              aria-hidden="true"
+              className={cn(composerInputTextClassName, "invisible")}
+              data-slot="composer-ghost-sizer"
+            >
+              {ghostContent}
+            </div>
+            <div
+              aria-hidden="true"
+              className={cn(
+                composerInputTextClassName,
+                "pointer-events-none absolute inset-0",
+              )}
+              data-slot="composer-ghost"
+            >
+              {ghostContent}
+            </div>
+            {input}
+          </div>
+        ) : (
+          input
+        )}
       </ScrollArea>
       {tokenHosts?.map((host, index) => {
         const node = host.parentElement;

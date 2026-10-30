@@ -1,15 +1,31 @@
-import { Show, UserButton } from "@clerk/tanstack-react-start";
+import { Show, UserButton, useAuth } from "@clerk/tanstack-react-start";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useConvexAuth, useMutation as useConvexMutation, useQuery } from "convex/react";
-import { Archive, Check, Clock, Plus } from "lucide-react";
+import { Archive, Check, Clock, ListFilter, Plus } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo } from "@/components/logo";
 import { toast } from "#/lib/toast";
 import { useChatSession } from "@/components/agent-sdk/chat-session-store";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+	ALL_SESSION_STATUS_FILTERS,
+	type SessionStatusFilter,
+	sessionStatusFilterKey,
+	useSessionStatusFilter,
+} from "@/components/session-status-filter-store";
 import {
 	Dialog,
 	DialogClose,
@@ -103,12 +119,58 @@ function SessionStatusIcon({ status, awaitingUser }: SessionStatusInfo) {
 	);
 }
 
+const SESSION_STATUS_FILTER_OPTIONS: Array<{
+	value: SessionStatusFilter;
+	label: string;
+	status: SessionStatusInfo;
+}> = [
+	{ value: "in-progress", label: "In progress", status: { status: "active" } },
+	{
+		value: "waiting",
+		label: "Waiting on you",
+		status: { status: "active", awaitingUser: true },
+	},
+	{ value: "resolved", label: "Resolved", status: { status: "resolved" } },
+	{ value: "archived", label: "Archived", status: { status: "archived" } },
+];
+
 export function AppSidebar() {
 	const beginNewChat = useChatSession((state) => state.beginNewChat);
 	const matchRoute = useMatchRoute();
 	const navigate = useNavigate();
 	const { isAuthenticated } = useConvexAuth();
+	const { userId } = useAuth();
+	const selectedByUser = useSessionStatusFilter((state) => state.selectedByUser);
+	const setSelectedFilters = useSessionStatusFilter((state) => state.setSelected);
+	const filterUserKey = userId ?? "anonymous";
+	const selectedFilters =
+		selectedByUser[filterUserKey] ?? ALL_SESSION_STATUS_FILTERS;
+	const isAllFiltersSelected =
+		selectedFilters.length === ALL_SESSION_STATUS_FILTERS.length;
 	const sessions = useQuery(api.sessions.list, isAuthenticated ? {} : "skip");
+	const filteredSessions = sessions?.filter((session) =>
+		selectedFilters.includes(sessionStatusFilterKey(session))
+	);
+
+	const handleSelectAllFilters = () =>
+		setSelectedFilters(filterUserKey, ALL_SESSION_STATUS_FILTERS);
+
+	const handleToggleFilter = (filter: SessionStatusFilter) => {
+		if (selectedFilters.includes(filter)) {
+			if (selectedFilters.length === 1) return;
+			setSelectedFilters(
+				filterUserKey,
+				selectedFilters.filter((value) => value !== filter)
+			);
+			return;
+		}
+		setSelectedFilters(
+			filterUserKey,
+			ALL_SESSION_STATUS_FILTERS.filter(
+				(value) => value === filter || selectedFilters.includes(value)
+			)
+		);
+	};
 	const removeSession = useConvexMutation(api.sessions.remove);
 	const { mutateAsync: deleteSession, isPending: isDeleting } = useMutation({
 		mutationFn: (sessionId: SessionListItem["_id"]) =>
@@ -167,7 +229,70 @@ export function AppSidebar() {
 
 				<Show when="signed-in">
 					<SidebarGroup>
-						<SidebarGroupLabel>Recent sessions</SidebarGroupLabel>
+						<div className="flex items-center justify-between">
+							<SidebarGroupLabel>Recent sessions</SidebarGroupLabel>
+							<DropdownMenu>
+								<DropdownMenuTrigger
+									render={
+										<Button
+											aria-label="Filter sessions by status"
+											className="relative shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+											size="icon-xs"
+											variant="ghost"
+										>
+											<ListFilter aria-hidden="true" />
+											{!isAllFiltersSelected && (
+												<span
+													aria-hidden="true"
+													className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-sky-500"
+												/>
+											)}
+										</Button>
+									}
+								/>
+								<DropdownMenuContent align="end" className="w-56" side="bottom">
+									<DropdownMenuGroup>
+										<DropdownMenuLabel>Filter by status</DropdownMenuLabel>
+										<DropdownMenuCheckboxItem
+											checked={isAllFiltersSelected}
+											className="**:data-[slot=dropdown-menu-checkbox-item-indicator]:hidden"
+											onCheckedChange={handleSelectAllFilters}
+										>
+											<span className="flex-1">All</span>
+											<Checkbox
+												aria-hidden="true"
+												checked={isAllFiltersSelected}
+												className="pointer-events-none absolute right-2"
+												indeterminate={
+													!isAllFiltersSelected && selectedFilters.length > 0
+												}
+												tabIndex={-1}
+											/>
+										</DropdownMenuCheckboxItem>
+									</DropdownMenuGroup>
+									<DropdownMenuSeparator />
+									<DropdownMenuGroup>
+										{SESSION_STATUS_FILTER_OPTIONS.map((option) => (
+											<DropdownMenuCheckboxItem
+												checked={selectedFilters.includes(option.value)}
+												className="**:data-[slot=dropdown-menu-checkbox-item-indicator]:hidden"
+												key={option.value}
+												onCheckedChange={() => handleToggleFilter(option.value)}
+											>
+												<SessionStatusIcon {...option.status} />
+												<span className="flex-1">{option.label}</span>
+												<Checkbox
+													aria-hidden="true"
+													checked={selectedFilters.includes(option.value)}
+													className="pointer-events-none absolute right-2"
+													tabIndex={-1}
+												/>
+											</DropdownMenuCheckboxItem>
+										))}
+									</DropdownMenuGroup>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
 						<SidebarGroupContent>
 							{sessions === undefined ? (
 								<SidebarMenu>
@@ -181,8 +306,14 @@ export function AppSidebar() {
 										</SidebarMenuItem>
 									))}
 								</SidebarMenu>
+							) : filteredSessions && filteredSessions.length === 0 ? (
+								<p className="px-2 py-1.5 text-sidebar-foreground/60 text-xs">
+									{sessions && sessions.length > 0
+										? "No sessions match the selected filters."
+										: "No sessions yet."}
+								</p>
 							) : (
-								groupSessionsByRecency(sessions).map((group) => (
+								groupSessionsByRecency(filteredSessions ?? []).map((group) => (
 									<div key={group.label}>
 										<div className="px-2 pt-3 pb-1 font-medium text-[10px] text-sidebar-foreground/50 uppercase tracking-wider">
 											{group.label}
