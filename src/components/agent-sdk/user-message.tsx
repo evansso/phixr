@@ -9,6 +9,7 @@ import { Carousel, CarouselItem, CarouselNext, CarouselPrevious, useCarouselNavi
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { Textarea } from "#/components/ui/textarea";
 import { QuestionnaireAnswersCard } from "./questionnaire-card";
+import { UserMessageActions } from "./user-message-actions";
 import type { ToolOutput } from "#/lib/questionnaire/schema";
 
 export function getMessageText(message: UIMessage) {
@@ -79,7 +80,7 @@ export function UserMessage({
 	return (
 		<div className="group flex w-full flex-col items-end gap-1.5">
 			{isEditing ? (
-				<div className="flex w-full flex-col gap-2 p-1">
+				<div className="ml-auto flex w-full max-w-[min(100%,36rem)] flex-col gap-2 p-1">
 						<Textarea
 							aria-label="Edit message"
 							autoFocus
@@ -127,6 +128,17 @@ export function UserMessage({
 						{images.length > 1 ? <span className="absolute inset-0 grid place-items-center bg-black/45 text-lg font-semibold text-white transition-colors group-hover:bg-black/55">+{images.length - 1}</span> : null}
 					</button> : null}
 					{text ? <ChatMessage role="user" text={text} /> : null}
+					{text ? (
+						<UserMessageActions
+							createdAt={createdAt}
+							disabled={disabled}
+							onEdit={() => {
+								setDraft(text);
+								setIsEditing(true);
+							}}
+							text={text}
+						/>
+					) : null}
 					</>}
 					<Dialog onOpenChange={setGalleryOpen} open={galleryOpen}>
 						<DialogContent className="max-w-3xl">

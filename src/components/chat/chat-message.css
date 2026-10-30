@@ -1,10 +1,8 @@
-.agent-user-message-content {
-	overflow: hidden;
-}
-
-.agent-user-message-content:not(.is-expanded) {
-	-webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
-	mask-image: linear-gradient(to bottom, #000 75%, transparent 100%);
+/* Fade only the clipped tail of a collapsed long message. Short and
+   expanded messages get no mask, so their last lines stay full contrast. */
+.agent-user-message-content.is-collapsed {
+	-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent 100%);
+	mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent 100%);
 }
 
 /* Each word fades from 0 to 1 once, when it mounts. Several words land per

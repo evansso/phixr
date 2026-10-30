@@ -1,11 +1,11 @@
 import {
-	type CSSProperties,
 	memo,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
+import { ChevronDown } from "lucide-react";
 import { marked } from "marked";
 import ReactMarkdown, { type Options } from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -14,7 +14,25 @@ import { cn } from "#/lib/utils";
 import "./chat-message.css";
 import { useStreamingText } from "./use-streaming-text";
 
-const COLLAPSED_USER_MESSAGE_HEIGHT = 240;
+const COLLAPSED_USER_MESSAGE_HEIGHT = 200;
+
+const LOG_LINE_PATTERNS = [
+	/^\s*(\$|#|>>>)/,
+	/^\s*\[?(sudo|dpkg|apt|apt-get|npm|pnpm|yarn|bun|error|warning|warn|info|debug)\b/i,
+	/[\w.-]+@[\w.-]+[:~]/,
+	/\b(error|warning|depends on|not installed):/i,
+	/^\s*\(?(reading|preparing|unpacking|selecting|setting up|processing)\b/i,
+];
+
+/** Pasted terminal output / logs read far better in mono than in prose type. */
+function isLogLike(text: string) {
+	const lines = text.split("\n").filter((line) => line.trim());
+	if (lines.length < 3) return false;
+	const hits = lines.filter((line) =>
+		LOG_LINE_PATTERNS.some((pattern) => pattern.test(line))
+	).length;
+	return hits >= 2 || (lines.length >= 8 && hits >= 1);
+}
 
 type HastNode = {
 	type: string;
@@ -105,6 +123,9 @@ export function ChatMessage({
 	const [isExpandable, setIsExpandable] = useState(false);
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [contentHeight, setContentHeight] = useState(0);
+	// Height animates only on user toggle, never on first measurement,
+	// so history does not visibly collapse on mount.
+	const [animateHeight, setAnimateHeight] = useState(false);
 
 	useEffect(() => {
 		if (isStreaming) setHasStreamed(true);
@@ -113,6 +134,11 @@ export function ChatMessage({
 	useEffect(() => {
 		onRevealComplete?.(!isStreaming);
 	}, [isStreaming, onRevealComplete]);
+
+	useEffect(() => {
+		// A replaced/edited message starts collapsed again.
+		setIsExpanded(false);
+	}, [text]);
 
 	useEffect(() => {
 		if (role !== "user") return;
@@ -131,49 +157,65 @@ export function ChatMessage({
 	}, [role, text]);
 
 	if (role === "user") {
+		const logLike = isLogLike(text);
+		const collapsed = isExpandable && !isExpanded;
 		return (
 			<div className={cn("flex w-full justify-end", className)}>
-				<div className="relative w-fit max-w-[min(100%,36rem)] overflow-hidden rounded-lg bg-muted-foreground/10 px-2 py-1.5 text-foreground text-sm">
+				<div
+					className={cn(
+						"w-fit min-w-0 rounded-2xl rounded-br-md bg-muted-foreground/10 px-3.5 py-2.5 text-foreground shadow-xs ring-1 ring-foreground/5",
+						logLike ? "max-w-[min(100%,40rem)]" : "max-w-[min(100%,36rem)]"
+					)}
+				>
 					<div
 						className={cn(
-							"agent-user-message-content",
-							isExpanded && "is-expanded"
+							"agent-user-message-content overflow-hidden",
+							animateHeight &&
+								"transition-[height] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none",
+							collapsed && "is-collapsed"
 						)}
 						style={
-							{
-								"--agent-message-height": `${contentHeight}px`,
-							} as CSSProperties
+							isExpandable
+								? {
+										height: `${isExpanded ? contentHeight : COLLAPSED_USER_MESSAGE_HEIGHT}px`,
+									}
+								: undefined
 						}
 					>
 						<div
-							className="whitespace-pre-wrap break-words"
+							className={cn(
+								"whitespace-pre-wrap [overflow-wrap:anywhere]",
+								logLike
+									? "font-mono text-[13px] leading-relaxed"
+									: "text-sm leading-relaxed"
+							)}
 							ref={contentRef}
 						>
 							{text}
 						</div>
 					</div>
-					{isExpandable && !isExpanded && (
-						<div className="absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-muted-foreground/15 pb-2">
+					{isExpandable ? (
+						<div className="flex justify-end pt-2">
 							<button
-								className="text-xs font-medium text-foreground underline underline-offset-2"
-								onClick={() => setIsExpanded(true)}
+								aria-expanded={isExpanded}
+								className="inline-flex items-center gap-1 rounded-full bg-background/70 py-1 pr-2 pl-2.5 text-xs font-medium text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-background focus-visible:outline-2 focus-visible:outline-ring"
+								onClick={() => {
+									setAnimateHeight(true);
+									setIsExpanded((value) => !value);
+								}}
 								type="button"
 							>
-								Show more
+								{isExpanded ? "Show less" : "Show more"}
+								<ChevronDown
+									aria-hidden="true"
+									className={cn(
+										"size-3.5 transition-transform duration-300 motion-reduce:transition-none",
+										isExpanded && "rotate-180"
+									)}
+								/>
 							</button>
 						</div>
-					)}
-					{isExpandable && isExpanded && (
-						<div className="flex justify-center bg-muted-foreground/15 px-3 pb-2">
-							<button
-								className="text-xs font-medium text-foreground underline underline-offset-2"
-								onClick={() => setIsExpanded(false)}
-								type="button"
-							>
-								Show less
-							</button>
-						</div>
-					)}
+					) : null}
 				</div>
 			</div>
 		);
