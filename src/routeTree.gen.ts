@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as authLayoutRouteImport } from './routes/(auth)/_layout'
 import { Route as dashLayoutRouteImport } from './routes/(dash)/_layout'
+import { Route as marketingLayoutRouteImport } from './routes/(marketing)/_layout'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiDgTokenRouteImport } from './routes/api.dg-token'
 import { Route as ApiUploadRouteImport } from './routes/api.upload'
-import { Route as dashLayoutIndexRouteImport } from './routes/(dash)/_layout.index'
 import { Route as dashLayoutNewRouteImport } from './routes/(dash)/_layout.new'
+import { Route as marketingLayoutIndexRouteImport } from './routes/(marketing)/_layout.index'
+import { Route as marketingLayoutWhyRouteImport } from './routes/(marketing)/_layout.why'
 import { Route as ApiUploadDeleteRouteImport } from './routes/api.upload.delete'
 import { Route as authLayoutLoginSplatRouteImport } from './routes/(auth)/_layout.login.$'
 import { Route as authLayoutRegisterSplatRouteImport } from './routes/(auth)/_layout.register.$'
@@ -28,6 +30,10 @@ const authLayoutRoute = authLayoutRouteImport.update({
 } as any)
 const dashLayoutRoute = dashLayoutRouteImport.update({
   id: '/(dash)/_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const marketingLayoutRoute = marketingLayoutRouteImport.update({
+  id: '/(marketing)/_layout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -45,15 +51,20 @@ const ApiUploadRoute = ApiUploadRouteImport.update({
   path: '/api/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
-const dashLayoutIndexRoute = dashLayoutIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => dashLayoutRoute,
-} as any)
 const dashLayoutNewRoute = dashLayoutNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => dashLayoutRoute,
+} as any)
+const marketingLayoutIndexRoute = marketingLayoutIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => marketingLayoutRoute,
+} as any)
+const marketingLayoutWhyRoute = marketingLayoutWhyRouteImport.update({
+  id: '/why',
+  path: '/why',
+  getParentRoute: () => marketingLayoutRoute,
 } as any)
 const ApiUploadDeleteRoute = ApiUploadDeleteRouteImport.update({
   id: '/delete',
@@ -87,8 +98,9 @@ export interface FileRoutesByFullPath {
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/new': typeof dashLayoutNewRoute
+  '/why': typeof marketingLayoutWhyRoute
   '/api/upload/delete': typeof ApiUploadDeleteRoute
-  '/': typeof dashLayoutIndexRoute
+  '/': typeof marketingLayoutIndexRoute
   '/login/$': typeof authLayoutLoginSplatRoute
   '/register/$': typeof authLayoutRegisterSplatRoute
   '/c/$chatId': typeof dashLayoutCChatIdRoute
@@ -99,8 +111,9 @@ export interface FileRoutesByTo {
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/new': typeof dashLayoutNewRoute
+  '/why': typeof marketingLayoutWhyRoute
   '/api/upload/delete': typeof ApiUploadDeleteRoute
-  '/': typeof dashLayoutIndexRoute
+  '/': typeof marketingLayoutIndexRoute
   '/login/$': typeof authLayoutLoginSplatRoute
   '/register/$': typeof authLayoutRegisterSplatRoute
   '/c/$chatId': typeof dashLayoutCChatIdRoute
@@ -110,12 +123,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(auth)/_layout': typeof authLayoutRouteWithChildren
   '/(dash)/_layout': typeof dashLayoutRouteWithChildren
+  '/(marketing)/_layout': typeof marketingLayoutRouteWithChildren
   '/api/chat': typeof ApiChatRoute
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/(dash)/_layout/new': typeof dashLayoutNewRoute
+  '/(marketing)/_layout/why': typeof marketingLayoutWhyRoute
   '/api/upload/delete': typeof ApiUploadDeleteRoute
-  '/(dash)/_layout/': typeof dashLayoutIndexRoute
+  '/(marketing)/_layout/': typeof marketingLayoutIndexRoute
   '/(auth)/_layout/login/$': typeof authLayoutLoginSplatRoute
   '/(auth)/_layout/register/$': typeof authLayoutRegisterSplatRoute
   '/(dash)/_layout/c/$chatId': typeof dashLayoutCChatIdRoute
@@ -128,6 +143,7 @@ export interface FileRouteTypes {
     | '/api/dg-token'
     | '/api/upload'
     | '/new'
+    | '/why'
     | '/api/upload/delete'
     | '/'
     | '/login/$'
@@ -140,6 +156,7 @@ export interface FileRouteTypes {
     | '/api/dg-token'
     | '/api/upload'
     | '/new'
+    | '/why'
     | '/api/upload/delete'
     | '/'
     | '/login/$'
@@ -150,12 +167,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/(auth)/_layout'
     | '/(dash)/_layout'
+    | '/(marketing)/_layout'
     | '/api/chat'
     | '/api/dg-token'
     | '/api/upload'
     | '/(dash)/_layout/new'
+    | '/(marketing)/_layout/why'
     | '/api/upload/delete'
-    | '/(dash)/_layout/'
+    | '/(marketing)/_layout/'
     | '/(auth)/_layout/login/$'
     | '/(auth)/_layout/register/$'
     | '/(dash)/_layout/c/$chatId'
@@ -165,6 +184,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   authLayoutRoute: typeof authLayoutRouteWithChildren
   dashLayoutRoute: typeof dashLayoutRouteWithChildren
+  marketingLayoutRoute: typeof marketingLayoutRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
   ApiDgTokenRoute: typeof ApiDgTokenRoute
   ApiUploadRoute: typeof ApiUploadRouteWithChildren
@@ -185,6 +205,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof dashLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(marketing)/_layout': {
+      id: '/(marketing)/_layout'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof marketingLayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -208,19 +235,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(dash)/_layout/': {
-      id: '/(dash)/_layout/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof dashLayoutIndexRouteImport
-      parentRoute: typeof dashLayoutRoute
-    }
     '/(dash)/_layout/new': {
       id: '/(dash)/_layout/new'
       path: '/new'
       fullPath: '/new'
       preLoaderRoute: typeof dashLayoutNewRouteImport
       parentRoute: typeof dashLayoutRoute
+    }
+    '/(marketing)/_layout/': {
+      id: '/(marketing)/_layout/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof marketingLayoutIndexRouteImport
+      parentRoute: typeof marketingLayoutRoute
+    }
+    '/(marketing)/_layout/why': {
+      id: '/(marketing)/_layout/why'
+      path: '/why'
+      fullPath: '/why'
+      preLoaderRoute: typeof marketingLayoutWhyRouteImport
+      parentRoute: typeof marketingLayoutRoute
     }
     '/api/upload/delete': {
       id: '/api/upload/delete'
@@ -276,18 +310,30 @@ const authLayoutRouteWithChildren = authLayoutRoute._addFileChildren(
 
 interface dashLayoutRouteChildren {
   dashLayoutNewRoute: typeof dashLayoutNewRoute
-  dashLayoutIndexRoute: typeof dashLayoutIndexRoute
   dashLayoutCChatIdRoute: typeof dashLayoutCChatIdRoute
 }
 
 const dashLayoutRouteChildren: dashLayoutRouteChildren = {
   dashLayoutNewRoute: dashLayoutNewRoute,
-  dashLayoutIndexRoute: dashLayoutIndexRoute,
   dashLayoutCChatIdRoute: dashLayoutCChatIdRoute,
 }
 
 const dashLayoutRouteWithChildren = dashLayoutRoute._addFileChildren(
   dashLayoutRouteChildren,
+)
+
+interface marketingLayoutRouteChildren {
+  marketingLayoutWhyRoute: typeof marketingLayoutWhyRoute
+  marketingLayoutIndexRoute: typeof marketingLayoutIndexRoute
+}
+
+const marketingLayoutRouteChildren: marketingLayoutRouteChildren = {
+  marketingLayoutWhyRoute: marketingLayoutWhyRoute,
+  marketingLayoutIndexRoute: marketingLayoutIndexRoute,
+}
+
+const marketingLayoutRouteWithChildren = marketingLayoutRoute._addFileChildren(
+  marketingLayoutRouteChildren,
 )
 
 interface ApiUploadRouteChildren {
@@ -305,6 +351,7 @@ const ApiUploadRouteWithChildren = ApiUploadRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   authLayoutRoute: authLayoutRouteWithChildren,
   dashLayoutRoute: dashLayoutRouteWithChildren,
+  marketingLayoutRoute: marketingLayoutRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
   ApiDgTokenRoute: ApiDgTokenRoute,
   ApiUploadRoute: ApiUploadRouteWithChildren,

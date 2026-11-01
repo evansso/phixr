@@ -1,7 +1,21 @@
 import { ArrowUpRight, Bug, CircleHelp, Gauge, Wifi } from "lucide-react";
+import { useState } from "react";
 import { PhixrIcon } from "#/components/phixr-icon";
 import { SidebarTrigger, useSidebar } from "#/components/ui/sidebar";
 import { cn } from "#/lib/utils";
+
+const ANYTIME_GREETING = "Something being weird? Let’s figure it out.";
+
+function timeAwareGreeting(hour: number): string {
+	if (hour >= 5 && hour < 12) return "Morning. What’s acting up?";
+	if (hour >= 12 && hour < 18) return "Hey there. What needs fixing today?";
+	return "Something giving you trouble tonight?";
+}
+
+function pickGreeting(now = new Date()): string {
+	const candidates = [timeAwareGreeting(now.getHours()), ANYTIME_GREETING];
+	return candidates[Math.floor(Math.random() * candidates.length)] ?? ANYTIME_GREETING;
+}
 
 const suggestions = [
 	{
@@ -39,6 +53,10 @@ export function EmptyState({
 }) {
 	const { isMobile, open, openMobile } = useSidebar();
 	const showSidebarTrigger = isMobile ? !openMobile : !open;
+	// Lazy initializer: picked once when this new-session empty state mounts
+	// (and again on the next new session, which remounts it via resetKey),
+	// not on every re-render.
+	const [greeting] = useState(pickGreeting);
 
 	return (
 		<div
@@ -51,7 +69,7 @@ export function EmptyState({
 			<div className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center gap-7 py-8 sm:gap-8">
 				<PhixrIcon className="mx-auto size-9 text-primary" />
 				<h1 className="text-center text-2xl tracking-tight sm:text-[28px]">
-					What should we fix?
+					{greeting}
 				</h1>
 				<div className="mx-auto grid w-full max-w-[45rem] grid-cols-2 gap-2.5 sm:gap-3">
 					{suggestions.map(({ icon: Icon, iconClassName, label, prompt }) => (

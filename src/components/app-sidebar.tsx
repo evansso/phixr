@@ -1,10 +1,10 @@
 import { Show, UserButton, useAuth } from "@clerk/tanstack-react-start";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useConvexAuth, useMutation as useConvexMutation, useQuery } from "convex/react";
-import { Archive, Check, Clock, ListFilter, Plus } from "lucide-react";
+import { Archive, Check, ChevronDown, Clock, ListFilter, Plus } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo } from "@/components/logo";
 import { toast } from "#/lib/toast";
@@ -26,6 +26,10 @@ import {
 	sessionStatusFilterKey,
 	useSessionStatusFilter,
 } from "@/components/session-status-filter-store";
+import {
+	type SessionRecencyGroupLabel,
+	useSidebarSessionGroups,
+} from "@/components/sidebar-session-groups-store";
 import {
 	Dialog,
 	DialogClose,
@@ -110,10 +114,49 @@ function sessionStatusDisplay({ status, awaitingUser }: SessionStatusInfo): {
 	};
 }
 
+function ScrollingLabel({ children }: { children: string }) {
+	const outerRef = useRef<HTMLSpanElement>(null);
+	const innerRef = useRef<HTMLSpanElement>(null);
+	const [shift, setShift] = useState(0);
+
+	useEffect(() => {
+		const outer = outerRef.current;
+		const inner = innerRef.current;
+		if (!outer || !inner) return;
+		const measure = () =>
+			setShift(Math.max(0, inner.offsetWidth - outer.clientWidth));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(outer);
+		return () => observer.disconnect();
+	}, [children]);
+
+	const overflowing = shift > 0;
+	return (
+		<span
+			className={`min-w-0 flex-1 overflow-hidden text-left text-[13px] ${overflowing ? "[mask-image:linear-gradient(to_right,black_calc(100%-12px),transparent)] group-hover/menu-button:[mask-image:linear-gradient(to_right,transparent,black_12px)]" : ""}`}
+			ref={outerRef}
+		>
+			<span
+				className="inline-block whitespace-nowrap transition-transform duration-300 ease-out group-hover/menu-button:[transform:translateX(calc(var(--marquee-shift)*-1))] group-hover/menu-button:[transition-delay:300ms] group-hover/menu-button:[transition-duration:var(--marquee-duration)] group-hover/menu-button:[transition-timing-function:linear] motion-reduce:transition-none motion-reduce:group-hover/menu-button:[transform:none]"
+				ref={innerRef}
+				style={
+					{
+						"--marquee-duration": `${Math.max(1.2, shift / 35)}s`,
+						"--marquee-shift": `${shift}px`,
+					} as React.CSSProperties
+				}
+			>
+				{children}
+			</span>
+		</span>
+	);
+}
+
 function SessionStatusIcon({ status, awaitingUser }: SessionStatusInfo) {
 	const { icon } = sessionStatusDisplay({ status, awaitingUser });
 	return (
-		<span aria-hidden="true" className="grid shrink-0 place-items-center">
+		<span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
 			{icon}
 		</span>
 	);
@@ -133,6 +176,55 @@ const SESSION_STATUS_FILTER_OPTIONS: Array<{
 	{ value: "resolved", label: "Resolved", status: { status: "resolved" } },
 	{ value: "archived", label: "Archived", status: { status: "archived" } },
 ];
+
+const LONG_GROUP_THRESHOLD = 6;
+
+function isGroupExpandedByDefault(label: SessionRecencyGroupLabel, count: number): boolean {
+	if (label === "Today") return true;
+	if (label === "Older") return false;
+	return count <= LONG_GROUP_THRESHOLD;
+}
+
+function CollapsibleSessionGroup({
+	label,
+	count,
+	children,
+}: {
+	label: SessionRecencyGroupLabel;
+	count: number;
+	children: React.ReactNode;
+}) {
+	const storedOpen = useSidebarSessionGroups((state) => state.openByLabel[label]);
+	const setOpen = useSidebarSessionGroups((state) => state.setOpen);
+	const open = storedOpen ?? isGroupExpandedByDefault(label, count);
+	const contentId = `session-group-${label.toLowerCase().replaceAll(" ", "-")}`;
+
+	return (
+		<div>
+			<button
+				aria-controls={contentId}
+				aria-expanded={open}
+				className="flex w-full cursor-pointer items-center gap-1 px-2 pt-3 pb-1 font-medium text-[10px] text-sidebar-foreground/50 uppercase tracking-wider transition-colors hover:text-sidebar-foreground"
+				onClick={() => setOpen(label, !open)}
+				type="button"
+			>
+				<span className="flex-1 text-left">{label}</span>
+				<ChevronDown
+					aria-hidden="true"
+					className={`size-3 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] ${open ? "rotate-180" : ""}`}
+				/>
+			</button>
+			<div
+				aria-hidden={!open}
+				className={`grid transition-[grid-template-rows] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] ${open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"}`}
+				id={contentId}
+				inert={!open}
+			>
+				<div className="overflow-hidden">{children}</div>
+			</div>
+		</div>
+	);
+}
 
 export function AppSidebar() {
 	const beginNewChat = useChatSession((state) => state.beginNewChat);
@@ -217,7 +309,7 @@ export function AppSidebar() {
 									onClick={beginNewChat}
 									render={<Link to="/new" />}
 								>
-									<span className="grid  shrink-0 place-items-center rounded bg-muted-foreground/15 p-0.5 text-muted-foreground">
+									<span className="grid size-4 shrink-0 place-items-center rounded bg-muted-foreground/15 text-muted-foreground">
 										<Plus className="size-2" />
 									</span>
 									<span>New session</span>
@@ -314,10 +406,11 @@ export function AppSidebar() {
 								</p>
 							) : (
 								groupSessionsByRecency(filteredSessions ?? []).map((group) => (
-									<div key={group.label}>
-										<div className="px-2 pt-3 pb-1 font-medium text-[10px] text-sidebar-foreground/50 uppercase tracking-wider">
-											{group.label}
-										</div>
+									<CollapsibleSessionGroup
+										count={group.sessions.length}
+										key={group.label}
+										label={group.label}
+									>
 										<SidebarMenu>
 											{group.sessions.map((session) => {
 												const title = session.title || "New session";
@@ -350,9 +443,7 @@ export function AppSidebar() {
 																			awaitingUser={session.awaitingUser}
 																			status={session.status}
 																		/>
-																		<span className="min-w-0 flex-1 truncate text-left text-[13px]">
-																			{title}
-																		</span>
+																		<ScrollingLabel>{title}</ScrollingLabel>
 																	</SidebarMenuButton>
 																}
 															/>
@@ -381,7 +472,7 @@ export function AppSidebar() {
 																render={
 																	<SidebarMenuAction
 																		aria-label={`Delete ${title}`}
-																		className="bg-sidebar-accent"
+																		className="top-1/2 -translate-y-1/2 bg-sidebar-accent before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-6 before:bg-gradient-to-l before:from-sidebar-accent before:to-transparent peer-data-[size=default]/menu-button:top-1/2"
 																		onClick={(event) => {
 																			event.preventDefault();
 																			event.stopPropagation();
@@ -399,7 +490,7 @@ export function AppSidebar() {
 												);
 											})}
 										</SidebarMenu>
-									</div>
+									</CollapsibleSessionGroup>
 								))
 							)}
 						</SidebarGroupContent>
@@ -479,7 +570,7 @@ export function AppSidebar() {
 function groupSessionsByRecency<T extends { updatedAt: number }>(sessions: T[]) {
 	const today = new Date();
 	const todayIndex = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-	const groups = new Map<string, T[]>();
+	const groups = new Map<SessionRecencyGroupLabel, T[]>();
 
 	for (const session of sessions) {
 		const updatedAt = new Date(session.updatedAt);
@@ -489,7 +580,7 @@ function groupSessionsByRecency<T extends { updatedAt: number }>(sessions: T[]) 
 			updatedAt.getDate()
 		);
 		const daysAgo = Math.floor((todayIndex - updatedIndex) / 86_400_000);
-		const label =
+		const label: SessionRecencyGroupLabel =
 			daysAgo <= 0
 				? "Today"
 				: daysAgo === 1
@@ -500,7 +591,9 @@ function groupSessionsByRecency<T extends { updatedAt: number }>(sessions: T[]) 
 		groups.set(label, [...(groups.get(label) ?? []), session]);
 	}
 
-	return ["Today", "Yesterday", "Last 7 days", "Older"].flatMap((label) => {
+	return (
+		["Today", "Yesterday", "Last 7 days", "Older"] as SessionRecencyGroupLabel[]
+	).flatMap((label) => {
 		const groupedSessions = groups.get(label);
 		return groupedSessions ? [{ label, sessions: groupedSessions }] : [];
 	});

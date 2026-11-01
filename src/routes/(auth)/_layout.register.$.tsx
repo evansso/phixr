@@ -12,5 +12,5 @@ export const Route = createFileRoute("/(auth)/_layout/register/$")({
 });
 
 function Page() {
-	return <SignUp />;
+	return <SignUp fallbackRedirectUrl="/new" />;
 }

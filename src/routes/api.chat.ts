@@ -357,6 +357,7 @@ export const Route = createFileRoute("/api/chat")({
 						}
 						const result = streamText({
 							model: museModel,
+							reasoning: "medium",
 							system: buildSystemPrompt(skillIndex()),
 							messages: modelMessages,
 							tools: {

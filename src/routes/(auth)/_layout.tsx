@@ -1,7 +1,19 @@
 import { Logo } from "@/components/logo";
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+
+const getIsSignedIn = createServerFn({ method: "GET" }).handler(async () => {
+	const { auth } = await import("@clerk/tanstack-react-start/server");
+	const { userId } = await auth();
+	return Boolean(userId);
+});
 
 export const Route = createFileRoute("/(auth)/_layout")({
+	beforeLoad: async () => {
+		if (await getIsSignedIn()) {
+			throw redirect({ replace: true, to: "/new" });
+		}
+	},
 	component: AuthLayout,
 });
 
