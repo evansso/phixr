@@ -123,8 +123,14 @@ function ScrollingLabel({ children }: { children: string }) {
 		const outer = outerRef.current;
 		const inner = innerRef.current;
 		if (!outer || !inner) return;
-		const measure = () =>
-			setShift(Math.max(0, inner.offsetWidth - outer.clientWidth));
+		// Archive button (20px + 4px offset) and its 24px left fade overlay the
+		// right edge on hover, so scroll past the overflow by that zone plus a
+		// small gap — otherwise the end of the title stops hidden under it.
+		const ARCHIVE_OVERLAY_GAP = 48;
+		const measure = () => {
+			const overflow = inner.offsetWidth - outer.clientWidth;
+			setShift(overflow > 0 ? overflow + ARCHIVE_OVERLAY_GAP : 0);
+		};
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(outer);
@@ -472,7 +478,7 @@ export function AppSidebar() {
 																render={
 																	<SidebarMenuAction
 																		aria-label={`Delete ${title}`}
-																		className="top-1/2 -translate-y-1/2 bg-sidebar-accent before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-6 before:bg-gradient-to-l before:from-sidebar-accent before:to-transparent peer-data-[size=default]/menu-button:top-1/2"
+																		className="top-1/2 -translate-y-1/2 cursor-pointer bg-sidebar-accent before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-6 before:bg-gradient-to-l before:from-sidebar-accent before:to-transparent peer-data-[size=default]/menu-button:top-1/2"
 																		onClick={(event) => {
 																			event.preventDefault();
 																			event.stopPropagation();
