@@ -11,6 +11,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { ErrorPage, NotFoundPage } from "#/components/error-page";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastProvider } from "@/components/ui/toast";
 import appCss from "../styles.css?url";
@@ -68,6 +69,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 			],
 		}),
 		component: RootComponent,
+		errorComponent: ({ error, reset }) => <ErrorPage error={error} reset={reset} />,
+		notFoundComponent: () => <NotFoundPage />,
 		shellComponent: RootDocument,
 	}
 );

@@ -79,6 +79,9 @@ export function UserMenu() {
 							<span className="block min-w-0 flex-1 truncate font-medium text-sm">
 								{name}
 							</span>
+							<span className="shrink-0 rounded-sm bg-muted-foreground/15 px-2 py-1 font-medium text-[10px] leading-none text-muted-foreground uppercase">
+								Beta
+							</span>
 							<ChevronsUpDown
 								aria-hidden="true"
 								className="size-4 shrink-0 text-sidebar-foreground/50"
@@ -86,7 +89,7 @@ export function UserMenu() {
 						</button>
 					}
 				/>
-				<DropdownMenuContent align="start" className="w-60" side="top" sideOffset={8}>
+				<DropdownMenuContent align="start" className="w-(--anchor-width)" side="top" sideOffset={8}>
 					<DropdownMenuGroup>
 						<DropdownMenuItem className="cursor-pointer" onClick={() => openSettings("account")}>
 							<Settings aria-hidden="true" />
