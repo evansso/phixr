@@ -1,4 +1,4 @@
-import { Show, UserButton, useAuth } from "@clerk/tanstack-react-start";
+import { Show, useAuth } from "@clerk/tanstack-react-start";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +7,7 @@ import { useConvexAuth, useMutation as useConvexMutation, useQuery } from "conve
 import { Archive, Check, ChevronDown, Clock, ListFilter, Plus } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo } from "@/components/logo";
+import { UserMenu } from "@/components/user-menu";
 import { toast } from "#/lib/toast";
 import { useChatSession } from "@/components/agent-sdk/chat-session-store";
 import { Button } from "@/components/ui/button";
@@ -545,9 +546,9 @@ export function AppSidebar() {
 			</SidebarContent>
 
 			<SidebarFooter>
-				<div className="flex min-h-10 items-center px-2 py-1">
+				<div className="flex min-h-10 items-center py-1">
 					<Show when="signed-in">
-						<UserButton />
+						<UserMenu />
 					</Show>
 					<Show when="signed-out">
 						<span className="px-2 text-sidebar-foreground/60 text-xs">
