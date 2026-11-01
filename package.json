@@ -10,6 +10,8 @@
     "check": "ultracite check",
     "convex:dev": "convex dev",
     "dev": "vite dev --port 3000",
+    "dev:build": "cross-env NODE_ENV=development vite build --mode development",
+    "dev:preview": "cross-env NODE_ENV=development vite preview --mode development",
     "devtools": "devtools",
     "fix": "ultracite fix",
     "generate-routes": "tsr generate",
@@ -69,6 +71,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "cross-env": "^10.1.0",
     "typescript": "^6.0.2",
     "ultracite": "8.0.1",
     "vite": "^8.0.0"

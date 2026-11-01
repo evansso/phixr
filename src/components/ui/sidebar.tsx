@@ -35,6 +35,10 @@ type SidebarContextProps = {
   state: "expanded" | "collapsed";
   open: boolean;
   setOpen: (open: boolean) => void;
+  peeking: boolean;
+  setPeeking: (peeking: boolean) => void;
+  schedulePeek: (immediate?: boolean) => void;
+  scheduleClosePeek: () => void;
   openMobile: boolean;
   setOpenMobile: (open: boolean) => void;
   isMobile: boolean;
@@ -67,6 +71,9 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
+  // Temporary hover preview while pinned-closed. Kept separate from `open`
+  // so peeking never reserves layout space or writes the sidebar cookie.
+  const [peeking, setPeeking] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -85,6 +92,37 @@ function SidebarProvider({
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
     [setOpenProp, open]
+  );
+
+  const peekTimer = React.useRef<number | undefined>(undefined);
+  const closeTimer = React.useRef<number | undefined>(undefined);
+
+  const schedulePeek = React.useCallback(
+    (immediate = false) => {
+      if (open || isMobile) return;
+      window.clearTimeout(closeTimer.current);
+      window.clearTimeout(peekTimer.current);
+      if (immediate) {
+        setPeeking(true);
+      } else {
+        peekTimer.current = window.setTimeout(() => setPeeking(true), 200);
+      }
+    },
+    [open, isMobile]
+  );
+
+  const scheduleClosePeek = React.useCallback(() => {
+    window.clearTimeout(peekTimer.current);
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setPeeking(false), 250);
+  }, []);
+
+  React.useEffect(
+    () => () => {
+      window.clearTimeout(peekTimer.current);
+      window.clearTimeout(closeTimer.current);
+    },
+    []
   );
 
   // Helper to toggle the sidebar.
@@ -119,12 +157,27 @@ function SidebarProvider({
       state,
       open,
       setOpen,
+      peeking,
+      setPeeking,
+      schedulePeek,
+      scheduleClosePeek,
       isMobile,
       openMobile,
       setOpenMobile,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [
+      state,
+      open,
+      setOpen,
+      peeking,
+      schedulePeek,
+      scheduleClosePeek,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+    ]
   );
 
   return (
@@ -163,7 +216,24 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const {
+    isMobile,
+    state,
+    open,
+    peeking,
+    setPeeking,
+    schedulePeek,
+    scheduleClosePeek,
+    openMobile,
+    setOpenMobile,
+  } = useSidebar();
+  const isPeeking = peeking && !open && collapsible === "offcanvas";
+
+  // Pinning takes over from peeking: reset it so unpinning later closes
+  // fully instead of dropping back into a peek under the cursor.
+  React.useEffect(() => {
+    if (open) setPeeking(false);
+  }, [open, setPeeking]);
 
   if (collapsible === "none") {
     return (
@@ -210,15 +280,30 @@ function Sidebar({
     <div
       className="group peer hidden text-sidebar-foreground md:block"
       data-collapsible={state === "collapsed" ? collapsible : ""}
+      data-peeking={isPeeking}
       data-side={side}
       data-slot="sidebar"
       data-state={state}
       data-variant={variant}
+      onMouseEnter={() => schedulePeek()}
+      onMouseLeave={scheduleClosePeek}
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* Edge hot-zone: hovering it peeks the sidebar without pinning it. */}
+      {!open && collapsible === "offcanvas" && (
+        <div
+          aria-hidden="true"
+          className={cn(
+            "fixed inset-y-0 z-20 hidden w-4 md:block",
+            side === "left" ? "left-0" : "right-0"
+          )}
+          data-sidebar="peek-trigger"
+        />
+      )}
+      {/* This is what handles the sidebar gap on desktop. It only follows
+          the pinned `open` state, so peeking never pushes the content. */}
       <div
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -229,11 +314,17 @@ function Sidebar({
       />
       <div
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear data-[side=right]:right-0 data-[side=left]:left-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width,padding] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] data-[side=right]:right-0 data-[side=left]:left-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] md:flex",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+          // Peeking: slide in over the content as a floating card. The
+          // pinned state is untouched, so this never creates layout space.
+          isPeeking &&
+            (side === "left"
+              ? "group-data-[collapsible=offcanvas]:left-0! z-30 border-r-0! p-2"
+              : "group-data-[collapsible=offcanvas]:right-0! z-30 border-l-0! p-2"),
           className
         )}
         data-side={side}
@@ -241,7 +332,10 @@ function Sidebar({
         {...props}
       >
         <div
-          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+          className={cn(
+            "flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border",
+            isPeeking && "rounded-lg shadow-xl ring-1 ring-sidebar-border"
+          )}
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
         >
@@ -257,24 +351,50 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar();
+  const { toggleSidebar, open, openMobile, isMobile, peeking, schedulePeek, scheduleClosePeek } =
+    useSidebar();
+  const label = (isMobile ? openMobile : open) ? "Hide sidebar" : "Show sidebar";
 
   return (
-    <Button
-      className={cn(className)}
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
-      size="icon-sm"
-      variant="ghost"
-      {...props}
-    >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        delay={300}
+        render={
+          <Button
+            className={cn(className)}
+            data-sidebar="trigger"
+            data-slot="sidebar-trigger"
+            onClick={(event) => {
+              onClick?.(event);
+              toggleSidebar();
+            }}
+            size="icon-sm"
+            variant="ghost"
+            {...props}
+            onMouseEnter={() => schedulePeek(true)}
+            onMouseLeave={() => {
+              // Once the card is up, leaving the panel itself closes it.
+              // Only cancel a still-pending peek here.
+              if (!peeking) scheduleClosePeek();
+            }}
+          >
+            <PanelLeftIcon />
+            <span className="sr-only">{label}</span>
+          </Button>
+        }
+      />
+      <TooltipContent
+        align="center"
+        className="bg-popover text-popover-foreground"
+        side="bottom"
+        sideOffset={6}
+      >
+        <span className="flex items-center gap-2 px-1 py-0.5">
+          <span>{label}</span>
+          <span className="text-muted-foreground">Ctrl + B</span>
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

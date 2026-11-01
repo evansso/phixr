@@ -50,7 +50,9 @@ import {
 	SidebarMenuAction,
 	SidebarMenuButton,
 	SidebarMenuItem,
+	SidebarRail,
 	SidebarTrigger,
+	useSidebar,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../convex/_generated/api";
@@ -233,6 +235,8 @@ function CollapsibleSessionGroup({
 }
 
 export function AppSidebar() {
+	const { open, peeking } = useSidebar();
+	const isPeeking = peeking && !open;
 	const beginNewChat = useChatSession((state) => state.beginNewChat);
 	const matchRoute = useMatchRoute();
 	const navigate = useNavigate();
@@ -301,8 +305,21 @@ export function AppSidebar() {
 	return (
 		<Sidebar>
 			<SidebarHeader className="flex-row items-center justify-between px-4 py-3">
-				<Logo className="h-4 w-auto text-sidebar-foreground" />
-				<SidebarTrigger aria-label="Close sidebar" size="icon-xs" />
+				{isPeeking ? (
+					<SidebarTrigger aria-label="Show sidebar" size="icon-xs" />
+				) : (
+					<>
+						<Link
+							aria-label="New session"
+							className="cursor-pointer"
+							onClick={beginNewChat}
+							to="/new"
+						>
+							<Logo className="h-4 w-auto text-sidebar-foreground" />
+						</Link>
+						<SidebarTrigger aria-label="Close sidebar" size="icon-xs" />
+					</>
+				)}
 			</SidebarHeader>
 
 			<SidebarContent>
@@ -569,6 +586,7 @@ export function AppSidebar() {
 					</div>
 				</DialogContent>
 			</Dialog>
+			<SidebarRail />
 		</Sidebar>
 	);
 }
