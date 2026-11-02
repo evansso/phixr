@@ -528,6 +528,10 @@ export function AssistantMessage({
 	// by the parent (per round) so it is sticky while reading.
 	const isFoldableProcess = (item: FlowItem) => item.tier === "process" && !item.pending && !item.awaitingUser;
 	const processCount = flow.filter(isFoldableProcess).length;
+	const flowContent = (item: FlowItem) =>
+		item.kind === "text"
+			? <div className="pt-0.5"><ChatMessage isStreaming={isStreaming && item.key === lastTextKey} role="assistant" text={item.text ?? ""} /></div>
+			: item.node;
 	let displayFlow = flow;
 	if (foldable && processCount > 0) {
 		const toggleItem: FlowItem = {
@@ -537,15 +541,40 @@ export function AssistantMessage({
 			tier: "outcome",
 			icon: <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />,
 			node: (
-				<button
-					aria-expanded={!folded}
-					className="flex min-h-7 cursor-pointer items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
-					onClick={() => onToggleFold?.(folded)}
-					type="button"
-				>
-					<span>{folded ? `Details · ${processCount} ${processCount === 1 ? "step" : "steps"}` : "Hide details"}</span>
-					<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", !folded && "rotate-180")} />
-				</button>
+				<div>
+					<button
+						aria-expanded={!folded}
+						className="flex min-h-7 cursor-pointer items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+						onClick={() => onToggleFold?.(folded)}
+						type="button"
+					>
+						<span>{folded ? `Details · ${processCount} ${processCount === 1 ? "step" : "steps"}` : "Hide details"}</span>
+						<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", !folded && "rotate-180")} />
+					</button>
+					{/* Same opening motion as the research activity detail:
+					    content stays mounted in a grid row that animates
+					    between 0fr and 1fr on the material-standard curve,
+					    clipped while closing. */}
+					<div
+						aria-hidden={folded}
+						inert={folded}
+						className={cn(
+							"grid transition-[grid-template-rows] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
+							folded ? "[grid-template-rows:0fr]" : "[grid-template-rows:1fr]"
+						)}
+					>
+						<div className="overflow-hidden">
+							<div className="flex flex-col pt-2">
+								{flow.filter(isFoldableProcess).map((item) => (
+									<div className="relative flex items-start gap-3 pb-4 last:pb-0" key={item.key}>
+										<FlowNode awaitingUser={item.awaitingUser} icon={item.icon} pending={item.pending} />
+										<div className="min-w-0 flex-1">{flowContent(item)}</div>
+									</div>
+								))}
+							</div>
+						</div>
+					</div>
+				</div>
 			),
 		};
 		displayFlow = [];
@@ -556,7 +585,7 @@ export function AssistantMessage({
 					displayFlow.push(toggleItem);
 					inserted = true;
 				}
-				if (folded) continue;
+				continue;
 			}
 			displayFlow.push(item);
 		}
@@ -575,11 +604,7 @@ export function AssistantMessage({
 					transition={{ duration: 0.3, ease: "easeOut" }}
 				>
 					<FlowNode awaitingUser={item.awaitingUser} icon={item.icon} pending={item.pending} />
-					<div className="min-w-0 flex-1">
-						{item.kind === "text"
-							? <div className="pt-0.5"><ChatMessage isStreaming={isStreaming && item.key === lastTextKey} role="assistant" text={item.text ?? ""} /></div>
-							: item.node}
-					</div>
+					<div className="min-w-0 flex-1">{flowContent(item)}</div>
 				</motion.div>
 			))}
 			{showThinkingStatus ? (

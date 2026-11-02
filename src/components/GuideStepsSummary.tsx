@@ -50,10 +50,18 @@ export function GuideStepsSummary({ input, output }: { input: GuideStepsInput; o
 				</span>
 				{expandable ? <ChevronDown aria-hidden="true" className={`mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] ${open ? "rotate-180" : ""}`} /> : null}
 			</button>
-			{expandable && open ? (
-				<div className="mt-3">
-					<p className="mb-3 text-xs leading-relaxed text-muted-foreground">{description}</p>
-					<ol className="flex flex-col divide-y rounded-lg border">
+			{/* Same opening motion as the research activity detail: content
+			    stays mounted in a grid row that animates between 0fr and
+			    1fr on the material-standard curve, clipped while closing. */}
+			<div
+				aria-hidden={expandable && !open}
+				inert={expandable && !open}
+				className={expandable ? `grid transition-[grid-template-rows] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)] ${open ? "[grid-template-rows:1fr]" : "[grid-template-rows:0fr]"}` : ""}
+			>
+				<div className="overflow-hidden">
+					<div className="pt-3">
+						<p className="mb-3 text-xs leading-relaxed text-muted-foreground">{description}</p>
+						{expandable ? <ol className="flex flex-col divide-y rounded-lg border">
 						{output.results.map((result) => {
 							const accepted = result.outcome === "matched_expected";
 							return (
@@ -66,9 +74,10 @@ export function GuideStepsSummary({ input, output }: { input: GuideStepsInput; o
 								</li>
 							);
 						})}
-					</ol>
+						</ol> : null}
+					</div>
 				</div>
-			) : null}
+			</div>
 		</section>
 	);
 }

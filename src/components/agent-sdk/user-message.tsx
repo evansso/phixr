@@ -82,7 +82,24 @@ export function UserMessage({
 						<span>{`Questions answered · ${questionnaireAnswers.answers.length} ${questionnaireAnswers.answers.length === 1 ? "detail" : "details"}`}</span>
 						<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", !questionnaireCollapsed && "rotate-180")} />
 					</button>
-					{questionnaireCollapsed ? null : <QuestionnaireAnswersCard answers={questionnaireAnswers.answers} title={questionnaireAnswers.title} />}
+					{/* Same opening motion as the research activity detail:
+					    content stays mounted in a grid row that animates
+					    between 0fr and 1fr on the material-standard curve,
+					    clipped while closing. */}
+					<div
+						aria-hidden={questionnaireCollapsed}
+						inert={questionnaireCollapsed}
+						className={cn(
+							"grid w-full transition-[grid-template-rows] duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]",
+							questionnaireCollapsed ? "[grid-template-rows:0fr]" : "[grid-template-rows:1fr]"
+						)}
+					>
+						<div className="overflow-hidden">
+							<div className="pt-1.5">
+								<QuestionnaireAnswersCard answers={questionnaireAnswers.answers} title={questionnaireAnswers.title} />
+							</div>
+						</div>
+					</div>
 				</div>
 			);
 		}
