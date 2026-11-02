@@ -17,10 +17,19 @@ function getPolar() {
 	});
 }
 
+const UUID_PATTERN =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function betaProductId() {
-	const productId = process.env.POLAR_BETA_PRODUCT_ID;
+	const productId = process.env.POLAR_BETA_PRODUCT_ID?.trim();
 	if (!productId) {
 		throw new Error("POLAR_BETA_PRODUCT_ID is not configured");
+	}
+	if (!UUID_PATTERN.test(productId)) {
+		throw new Error(
+			`POLAR_BETA_PRODUCT_ID is not a valid UUID: "${productId}". ` +
+				"Copy the exact product ID from the Polar dashboard."
+		);
 	}
 	return productId;
 }

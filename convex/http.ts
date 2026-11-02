@@ -45,15 +45,31 @@ http.route({
 		}
 
 		const body = await request.text();
-		let event: ClerkEvent;
 		try {
-			event = new Webhook(secret).verify(body, {
+			// svix v2: verify() only validates the signature and returns
+			// undefined; it no longer returns the parsed payload.
+			new Webhook(secret).verify(body, {
 				"svix-id": svixId,
 				"svix-timestamp": svixTimestamp,
 				"svix-signature": svixSignature,
-			}) as unknown as ClerkEvent;
+			});
 		} catch {
 			return new Response("Invalid webhook signature", { status: 400 });
+		}
+
+		let event: ClerkEvent;
+		try {
+			const parsed: unknown = JSON.parse(body);
+			if (
+				typeof parsed !== "object" ||
+				parsed === null ||
+				typeof (parsed as { type?: unknown }).type !== "string"
+			) {
+				return new Response("Invalid webhook payload", { status: 400 });
+			}
+			event = parsed as ClerkEvent;
+		} catch {
+			return new Response("Invalid webhook payload", { status: 400 });
 		}
 
 		if (
@@ -64,7 +80,10 @@ http.route({
 			return new Response(null, { status: 200 });
 		}
 
-		const data = event.data;
+		const data: ClerkUserData | undefined = event.data;
+		if (!data?.id) {
+			return new Response("Invalid webhook payload", { status: 400 });
+		}
 		const primary =
 			data.email_addresses?.find(
 				(entry) => entry.id === data.primary_email_address_id

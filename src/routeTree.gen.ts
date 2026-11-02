@@ -15,6 +15,7 @@ import { Route as marketingLayoutRouteImport } from './routes/(marketing)/_layou
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiDgTokenRouteImport } from './routes/api.dg-token'
 import { Route as ApiUploadRouteImport } from './routes/api.upload'
+import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as dashLayoutNewRouteImport } from './routes/(dash)/_layout.new'
 import { Route as marketingLayoutIndexRouteImport } from './routes/(marketing)/_layout.index'
 import { Route as marketingLayoutWhyRouteImport } from './routes/(marketing)/_layout.why'
@@ -49,6 +50,11 @@ const ApiDgTokenRoute = ApiDgTokenRouteImport.update({
 const ApiUploadRoute = ApiUploadRouteImport.update({
   id: '/api/upload',
   path: '/api/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const dashLayoutNewRoute = dashLayoutNewRouteImport.update({
@@ -94,6 +100,7 @@ const ApiSessionsSessionIdGuidesToolCallIdResultsRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
@@ -107,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/api/sessions/$sessionId/guides/$toolCallId/results': typeof ApiSessionsSessionIdGuidesToolCallIdResultsRoute
 }
 export interface FileRoutesByTo {
+  '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/(auth)/_layout': typeof authLayoutRouteWithChildren
   '/(dash)/_layout': typeof dashLayoutRouteWithChildren
   '/(marketing)/_layout': typeof marketingLayoutRouteWithChildren
+  '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
   '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
@@ -139,6 +148,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/feedback'
     | '/api/chat'
     | '/api/dg-token'
     | '/api/upload'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionId/guides/$toolCallId/results'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/feedback'
     | '/api/chat'
     | '/api/dg-token'
     | '/api/upload'
@@ -168,6 +179,7 @@ export interface FileRouteTypes {
     | '/(auth)/_layout'
     | '/(dash)/_layout'
     | '/(marketing)/_layout'
+    | '/feedback'
     | '/api/chat'
     | '/api/dg-token'
     | '/api/upload'
@@ -182,6 +194,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  FeedbackRoute: typeof FeedbackRoute
   authLayoutRoute: typeof authLayoutRouteWithChildren
   dashLayoutRoute: typeof dashLayoutRouteWithChildren
   marketingLayoutRoute: typeof marketingLayoutRouteWithChildren
@@ -212,6 +225,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof marketingLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -349,6 +369,7 @@ const ApiUploadRouteWithChildren = ApiUploadRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
+  FeedbackRoute: FeedbackRoute,
   authLayoutRoute: authLayoutRouteWithChildren,
   dashLayoutRoute: dashLayoutRouteWithChildren,
   marketingLayoutRoute: marketingLayoutRouteWithChildren,
