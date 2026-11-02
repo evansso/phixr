@@ -32,6 +32,9 @@ type FlowItem = {
 	key: string;
 	index: number;
 	kind: "text" | "activity" | "action" | "label";
+	/** Process items are scaffolding that folds away once a round is
+	 * finished; outcomes stay visible; actions never fold. */
+	tier: "process" | "outcome" | "action";
 	text?: string;
 	node?: ReactNode;
 	icon?: ReactNode;
@@ -237,6 +240,9 @@ export function AssistantMessage({
 	questionnaireTurnStatuses,
 	sessionId,
 	statusText,
+	foldable = false,
+	folded = false,
+	onToggleFold,
 }: {
 	message: UIMessage;
 	createdAt?: Date;
@@ -245,6 +251,12 @@ export function AssistantMessage({
 	questionnaireTurnStatuses?: ReadonlyMap<string, "submitted" | "skipped">;
 	sessionId: string;
 	statusText?: string;
+	/** This message belongs to a finished round that can fold. */
+	foldable?: boolean;
+	/** Process items are currently folded away. Controlled by the parent
+	 * so expansion is sticky and shared across the whole round. */
+	folded?: boolean;
+	onToggleFold?: (expanded: boolean) => void;
 }) {
 	const { addToolResult, sendMessage } = useChatActions();
 	// Entry animation is armed only after the first commit, so steps
@@ -302,10 +314,25 @@ export function AssistantMessage({
 	// left rail per step — streamed text, tool activity, then the next
 	// text or card. Live steps shimmer; finished activities collapse to
 	// a closed row the user can open.
+	// The last text block of a message is its conclusion (outcome);
+	// every earlier text block is a lead-in to a tool call (process).
+	let lastTextIndex = -1;
+	parts.forEach((part, index) => {
+		if (part.type === "text" && part.text) {
+			lastTextIndex = index;
+			return;
+		}
+		const name = (part as ActivityPart).toolName ?? (part.type as string).replace(/^tool-/, "");
+		if (name === "reply") {
+			const input = (part as ActivityPart).input;
+			if (input && typeof input === "object" && typeof (input as Record<string, unknown>).message === "string") lastTextIndex = index;
+		}
+	});
+
 	const flow: FlowItem[] = [];
 	for (const [index, part] of parts.entries()) {
 		if (part.type === "text") {
-			if (part.text) flow.push({ key: `text-${index}`, index, kind: "text", text: part.text, icon: <PhixrIcon className="size-3.5" /> });
+			if (part.text) flow.push({ key: `text-${index}`, index, kind: "text", tier: index === lastTextIndex ? "outcome" : "process", text: part.text, icon: <PhixrIcon className="size-3.5" /> });
 			continue;
 		}
 		if (part.type === "reasoning" || part.type === "step-start") continue;
@@ -316,10 +343,14 @@ export function AssistantMessage({
 		if (name === "reply") {
 			// Legacy turns delivered the final answer through a reply tool.
 			const input = info.input && typeof info.input === "object" ? info.input as Record<string, unknown> : {};
-			if (typeof input.message === "string") flow.push({ key: `reply-${info.toolCallId}`, index, kind: "text", text: input.message });
+			if (typeof input.message === "string") flow.push({ key: `reply-${info.toolCallId}`, index, kind: "text", tier: index === lastTextIndex ? "outcome" : "process", text: input.message });
 			continue;
 		}
-		if ((name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") && lastActionIndex.get(name) !== index) continue;
+		// Within one message, only the last same-type action renders —
+		// unless an earlier one already completed, in which case it is
+		// history (a sequential batch) and stays visible as its summary.
+		const actionCompleted = info.state === "output-available" || info.state === "output-error";
+		if ((name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") && lastActionIndex.get(name) !== index && !actionCompleted) continue;
 
 		if (name === "askUserQuestionnaire") {
 			if (shownQuestionnaires.has(info.toolCallId) || hiddenActionCallIds?.has(info.toolCallId)) continue;
@@ -346,6 +377,7 @@ export function AssistantMessage({
 					key: info.toolCallId,
 					index,
 					kind: "label",
+					tier: "outcome",
 					icon: <Check aria-hidden="true" className="size-3.5 shrink-0" />,
 					node: <div className="flex min-h-7 items-center"><QuestionnaireAskedStatus count={answerCount} status={effectiveStatus} /></div>,
 				});
@@ -368,13 +400,14 @@ export function AssistantMessage({
 			};
 			const questionnaireIcon = <CircleHelp aria-hidden="true" className="size-3.5 shrink-0" />;
 			if (info.state === "input-streaming" || (info.state === "input-available" && isStreaming)) {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: questionnaireIcon, node: <CollapsibleActivity label="Let's narrow this down…" pending /> });
+				flow.push({ key: info.toolCallId, index, kind: "activity", tier: "action", pending: true, icon: questionnaireIcon, node: <CollapsibleActivity label="Let's narrow this down…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as Questionnaire;
 				flow.push({
 					key: info.toolCallId,
 					index,
 					kind: "action",
+					tier: "action",
 					awaitingUser: true,
 					icon: questionnaireIcon,
 					node: <>
@@ -388,24 +421,24 @@ export function AssistantMessage({
 		if (name === "guide_steps") {
 			const guideIcon = <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />;
 			if (info.state === "input-streaming") {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: guideIcon, node: <CollapsibleActivity label="Turning clues into a game plan…" pending /> });
+				flow.push({ key: info.toolCallId, index, kind: "activity", tier: "action", pending: true, icon: guideIcon, node: <CollapsibleActivity label="Turning clues into a game plan…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as GuideStepsInput;
-				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: guideIcon, node: <>{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}<GuideStepsCard input={input} onDone={(output) => addToolResult({ tool: "guide_steps", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} toolCallId={info.toolCallId} /></> });
+				flow.push({ key: info.toolCallId, index, kind: "action", tier: "action", awaitingUser: true, icon: guideIcon, node: <>{input.intro ? <p className="mb-2 text-sm leading-relaxed">{input.intro}</p> : null}<GuideStepsCard input={input} onDone={(output) => addToolResult({ tool: "guide_steps", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} toolCallId={info.toolCallId} /></> });
 			} else if (info.state === "output-available" && info.input && info.output) {
-				flow.push({ key: info.toolCallId, index, kind: "action", icon: guideIcon, node: <GuideStepsSummary input={info.input as GuideStepsInput} output={info.output as GuideStepsOutput} /> });
+				flow.push({ key: info.toolCallId, index, kind: "action", tier: "outcome", icon: guideIcon, node: <GuideStepsSummary input={info.input as GuideStepsInput} output={info.output as GuideStepsOutput} /> });
 			}
 			continue;
 		}
 		if (name === "propose_resolution") {
 			const resolutionIcon = <Flag aria-hidden="true" className="size-3.5 shrink-0" />;
 			if (info.state === "input-streaming") {
-				flow.push({ key: info.toolCallId, index, kind: "activity", pending: true, icon: resolutionIcon, node: <CollapsibleActivity label="Wrapping up our detective work…" pending /> });
+				flow.push({ key: info.toolCallId, index, kind: "activity", tier: "action", pending: true, icon: resolutionIcon, node: <CollapsibleActivity label="Wrapping up our detective work…" pending /> });
 			} else if (info.state === "input-available" && info.input) {
 				const input = info.input as ResolutionInput;
-				flow.push({ key: info.toolCallId, index, kind: "action", awaitingUser: true, icon: resolutionIcon, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
+				flow.push({ key: info.toolCallId, index, kind: "action", tier: "action", awaitingUser: true, icon: resolutionIcon, node: <ResolutionCard input={input} onDone={(output) => addToolResult({ tool: "propose_resolution", toolCallId: info.toolCallId, output } as never)} sessionId={sessionId} /> });
 			} else if (info.state === "output-available" && info.input && info.output) {
-				flow.push({ key: info.toolCallId, index, kind: "action", icon: resolutionIcon, node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
+				flow.push({ key: info.toolCallId, index, kind: "action", tier: "outcome", icon: resolutionIcon, node: <ResolutionSummary input={info.input as ResolutionInput} output={info.output as ResolutionOutput} /> });
 			}
 			continue;
 		}
@@ -452,6 +485,7 @@ export function AssistantMessage({
 			key: info.toolCallId,
 			index,
 			kind: "activity",
+			tier: "process",
 			pending,
 			icon: toolIcon(info) ?? <Globe aria-hidden="true" className="size-3.5 shrink-0" />,
 			node: <CollapsibleActivity
@@ -488,10 +522,50 @@ export function AssistantMessage({
 	const lastTextKey = [...flow].reverse().find((item) => item.kind === "text")?.key;
 	const firstActionKey = flow.find((item) => item.kind === "action")?.key;
 
+	// Finished round: process items fold behind one Details row placed
+	// where the first process item was. Outcomes stay in place, in
+	// order. Pending/awaiting items never fold. Expansion is controlled
+	// by the parent (per round) so it is sticky while reading.
+	const isFoldableProcess = (item: FlowItem) => item.tier === "process" && !item.pending && !item.awaitingUser;
+	const processCount = flow.filter(isFoldableProcess).length;
+	let displayFlow = flow;
+	if (foldable && processCount > 0) {
+		const toggleItem: FlowItem = {
+			key: "__round-details",
+			index: flow.find(isFoldableProcess)?.index ?? 0,
+			kind: "label",
+			tier: "outcome",
+			icon: <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />,
+			node: (
+				<button
+					aria-expanded={!folded}
+					className="flex min-h-7 cursor-pointer items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+					onClick={() => onToggleFold?.(folded)}
+					type="button"
+				>
+					<span>{folded ? `Details · ${processCount} ${processCount === 1 ? "step" : "steps"}` : "Hide details"}</span>
+					<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", !folded && "rotate-180")} />
+				</button>
+			),
+		};
+		displayFlow = [];
+		let inserted = false;
+		for (const item of flow) {
+			if (isFoldableProcess(item)) {
+				if (!inserted) {
+					displayFlow.push(toggleItem);
+					inserted = true;
+				}
+				if (folded) continue;
+			}
+			displayFlow.push(item);
+		}
+	}
+
 	return (
 		<div className="group relative flex w-full flex-col">
-			{flow.length > 1 ? <span aria-hidden="true" className="absolute top-3 bottom-3 left-[13px] w-px bg-border" /> : null}
-			{flow.map((item) => (
+			{displayFlow.length > 1 ? <span aria-hidden="true" className="absolute top-3 bottom-3 left-[13px] w-px bg-border" /> : null}
+			{displayFlow.map((item) => (
 				<motion.div
 					animate={{ opacity: 1, y: 0 }}
 					className="relative flex items-start gap-3 pb-4 last:pb-0"

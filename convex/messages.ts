@@ -61,6 +61,7 @@ export const getChat = query({
 		const messages = [...new Map(storedMessages.map((message) => [message.messageId, message])).values()];
 		return {
 			title: session.title,
+			status: session.status,
 			messages: messages.map(({ messageId, role, parts, metadata, createdAt }) => ({
 				id: messageId,
 				role,

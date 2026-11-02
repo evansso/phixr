@@ -1,8 +1,9 @@
 import type { UIMessage } from "ai";
 import { useChatActions } from "@ai-sdk-tools/store";
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
-import { ImageIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, ImageIcon } from "lucide-react";
+import { cn } from "#/lib/utils";
 import { ChatMessage } from "#/components/chat/chat-message";
 import { Button } from "#/components/ui/button";
 import { Carousel, CarouselItem, CarouselNext, CarouselPrevious, useCarouselNavigation } from "#/components/ui/carousel";
@@ -24,11 +25,17 @@ export function UserMessage({
 	createdAt,
 	disabled = false,
 	animateEntry = false,
+	questionnaireCollapsed,
+	onToggleQuestionnaire,
 }: {
 	message: UIMessage;
 	createdAt?: Date;
 	disabled?: boolean;
 	animateEntry?: boolean;
+	/** Undefined: not in a foldable round, always show the full card.
+	 * Otherwise controlled by the parent round state. */
+	questionnaireCollapsed?: boolean;
+	onToggleQuestionnaire?: (expanded: boolean) => void;
 }) {
 	const text = getMessageText(message);
 	const messageMetadata = message.metadata as {
@@ -58,6 +65,28 @@ export function UserMessage({
 		setDraft(text);
 		setIsEditing(false);
 	};
+
+	let questionnaireNode: ReactNode = null;
+	if (questionnaireAnswers?.answers) {
+		if (questionnaireCollapsed === undefined) {
+			questionnaireNode = <QuestionnaireAnswersCard answers={questionnaireAnswers.answers} title={questionnaireAnswers.title} />;
+		} else {
+			questionnaireNode = (
+				<div className="flex w-full flex-col items-end gap-1.5">
+					<button
+						aria-expanded={!questionnaireCollapsed}
+						className="flex min-h-7 cursor-pointer items-center gap-2 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+						onClick={() => onToggleQuestionnaire?.(Boolean(questionnaireCollapsed))}
+						type="button"
+					>
+						<span>{`Questions answered · ${questionnaireAnswers.answers.length} ${questionnaireAnswers.answers.length === 1 ? "detail" : "details"}`}</span>
+						<ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform duration-[260ms] [transition-timing-function:cubic-bezier(0.4,0,0.2,1)]", !questionnaireCollapsed && "rotate-180")} />
+					</button>
+					{questionnaireCollapsed ? null : <QuestionnaireAnswersCard answers={questionnaireAnswers.answers} title={questionnaireAnswers.title} />}
+				</div>
+			);
+		}
+	}
 
 	const saveEdit = async () => {
 		const updatedText = draft.trim();
@@ -122,7 +151,7 @@ export function UserMessage({
 					initial={animateEntry ? { opacity: 0, y: 3, scale: 0.98 } : undefined}
 					transition={{ duration: 0.16, ease: "easeOut" }}
 				>
-					{questionnaireAnswers?.answers ? <QuestionnaireAnswersCard answers={questionnaireAnswers.answers} title={questionnaireAnswers.title} /> : <>
+					{questionnaireAnswers?.answers ? questionnaireNode : <>
 					{images.length > 0 ? <button aria-label={`View ${images.length} attached image${images.length === 1 ? "" : "s"}`} className="group relative mb-1 block overflow-hidden rounded-xl border bg-muted text-left" onClick={() => setGalleryOpen(true)} type="button">
 						<img alt={images.length === 1 ? images[0]?.filename : `${images[0]?.filename} and ${images.length - 1} more`} className="max-h-40 max-w-[min(12rem,60vw)] object-cover" src={images[0]?.url} />
 						{images.length > 1 ? <span className="absolute inset-0 grid place-items-center bg-black/45 text-lg font-semibold text-white transition-colors group-hover:bg-black/55">+{images.length - 1}</span> : null}

@@ -2,6 +2,28 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+	users: defineTable({
+		clerkUserId: v.string(),
+		email: v.string(),
+		name: v.string(),
+		imageUrl: v.optional(v.string()),
+		polarCustomerId: v.optional(v.string()),
+		polarSubscriptionId: v.optional(v.string()),
+		provisioningStatus: v.union(
+			v.literal("pending"),
+			v.literal("provisioning"),
+			v.literal("active"),
+			v.literal("failed"),
+			v.literal("deleted")
+		),
+		clerkUpdatedAt: v.number(),
+		lastProvisioningError: v.optional(v.string()),
+		deletedAt: v.optional(v.number()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_clerk_id", ["clerkUserId"])
+		.index("by_email", ["email"]),
 	sessions: defineTable({
 		userId: v.string(),
 		chatKey: v.optional(v.string()),

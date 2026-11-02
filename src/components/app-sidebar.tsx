@@ -4,7 +4,12 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useConvexAuth, useMutation as useConvexMutation, useQuery } from "convex/react";
-import { Archive, Check, ChevronDown, Clock, ListFilter, Plus } from "lucide-react";
+import { Archive, ChevronDown, ListFilter, Plus } from "lucide-react";
+import {
+	SessionStatusIcon,
+	type SessionStatusInfo,
+	sessionStatusDisplay,
+} from "@/components/session-status";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo } from "@/components/logo";
 import { UserMenu } from "@/components/user-menu";
@@ -80,43 +85,6 @@ function formatSessionDate(timestamp: number): string {
 	}).format(new Date(timestamp));
 }
 
-type SessionStatusInfo = {
-	status: "active" | "resolved" | "archived";
-	awaitingUser?: boolean;
-};
-
-function sessionStatusDisplay({ status, awaitingUser }: SessionStatusInfo): {
-	label: string;
-	icon: React.ReactNode;
-} {
-	if (status === "resolved") {
-		return {
-			label: "Resolved",
-			icon: (
-				<span className="grid size-3.5 shrink-0 place-items-center rounded-full bg-green-500/15 text-green-700 dark:text-green-300">
-					<Check aria-hidden="true" className="size-2!" />
-				</span>
-			),
-		};
-	}
-	if (status === "archived") {
-		return {
-			label: "Archived",
-			icon: <Archive aria-hidden="true" className="size-3! shrink-0 text-sidebar-foreground/40" />,
-		};
-	}
-	if (awaitingUser) {
-		return {
-			label: "Waiting on you",
-			icon: <Clock aria-hidden="true" className="size-3! shrink-0 text-amber-600 dark:text-amber-400" />,
-		};
-	}
-	return {
-		label: "In progress",
-		icon: <span aria-hidden="true" className="size-[5px] shrink-0 rounded-full bg-sky-500" />,
-	};
-}
-
 function ScrollingLabel({ children }: { children: string }) {
 	const outerRef = useRef<HTMLSpanElement>(null);
 	const innerRef = useRef<HTMLSpanElement>(null);
@@ -158,15 +126,6 @@ function ScrollingLabel({ children }: { children: string }) {
 			>
 				{children}
 			</span>
-		</span>
-	);
-}
-
-function SessionStatusIcon({ status, awaitingUser }: SessionStatusInfo) {
-	const { icon } = sessionStatusDisplay({ status, awaitingUser });
-	return (
-		<span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
-			{icon}
 		</span>
 	);
 }

@@ -9,6 +9,7 @@ import {
 } from "@ai-sdk-tools/store";
 import { MessageScrollerItem } from "#/components/ui/message-scroller";
 import { AssistantMessage, AssistantStatusMessage } from "./assistant-message";
+import { roundByMessageId, splitRounds } from "./timeline-rounds";
 import { UserMessage } from "./user-message";
 import { statusLine, type ChatStatus, type StatusTrigger } from "./status-line";
 
@@ -59,6 +60,26 @@ export function AgentMessageList({
 		const turn = (message.metadata as { questionnaireTurn?: { toolCallId?: string } }).questionnaireTurn;
 		return !turn?.toolCallId || latestAnswerMessage.get(turn.toolCallId) === message.id;
 	});
+	// Finished rounds fold their process items. Expansion is held here,
+	// per round, so expanding any part of a round (assistant details or
+	// questionnaire answers) expands the round and is never undone by
+	// new messages arriving.
+	const rounds = roundByMessageId(splitRounds(messages));
+	// Keyed by session so switching sessions starts with every round
+	// folded, without an effect resetting state after first paint.
+	const [expansion, setExpansion] = useState<{ sessionId?: string; expanded: ReadonlySet<string> }>({
+		sessionId,
+		expanded: new Set(),
+	});
+	const expandedRounds = expansion.sessionId === sessionId ? expansion.expanded : new Set<string>();
+	const toggleRound = (roundId: string, expanded: boolean) => {
+		setExpansion((previous) => {
+			const next = new Set(previous.sessionId === sessionId ? previous.expanded : []);
+			if (expanded) next.add(roundId);
+			else next.delete(roundId);
+			return { sessionId, expanded: next };
+		});
+	};
 	const previousMessageIds = useRef<Set<string> | null>(null);
 	const enteringUserMessageId = previousMessageIds.current
 		? [...messages].reverse().find(
@@ -142,6 +163,12 @@ export function AgentMessageList({
 				const validCreatedAt =
 					createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : undefined;
 				const streaming = isStreaming && index === latestIndex;
+				const round = rounds.get(message.id);
+				const foldable = Boolean(round && !round.isLive);
+				const folded = foldable && !(round && expandedRounds.has(round.id));
+				const onToggleFold = foldable && round
+					? (expanded: boolean) => toggleRound(round.id, expanded)
+					: undefined;
 
 				return (
 					<MessageScrollerItem
@@ -155,6 +182,8 @@ export function AgentMessageList({
 								animateEntry={message.id === enteringUserMessageId}
 								message={message}
 								disabled={isStreaming}
+								questionnaireCollapsed={foldable ? folded : undefined}
+								onToggleQuestionnaire={onToggleFold}
 							/>
 						) : (
 							<AssistantMessage
@@ -163,11 +192,20 @@ export function AgentMessageList({
 								message={message}
 								statusText={streaming ? currentStatusLine ?? undefined : undefined}
 								sessionId={sessionId ?? ""}
+								foldable={foldable}
+								folded={folded}
+								onToggleFold={onToggleFold}
 								hiddenActionCallIds={new Set(message.parts.flatMap((part) => {
-									const toolPart = part as { type?: string; toolName?: string; toolCallId?: string };
+									const toolPart = part as { type?: string; toolName?: string; toolCallId?: string; state?: string };
 									const name = toolPart.toolName ?? toolPart.type?.replace(/^tool-/, "");
 									const turn = assistantTurnByMessage.get(message.id);
-									return (name === "askUserQuestionnaire" || name === "guide_steps") && toolPart.toolCallId && turn !== undefined && latestActionMessage.get(`${turn}:${name}`) !== message.id ? [toolPart.toolCallId] : [];
+									// A completed action is history and is never
+									// hidden: sequential batches in one turn all
+									// stay visible. Only an incomplete action
+									// superseded by a later same-type action in
+									// the same turn (retry/regeneration) is hidden.
+									const completed = toolPart.state === "output-available" || toolPart.state === "output-error";
+									return !completed && (name === "askUserQuestionnaire" || name === "guide_steps") && toolPart.toolCallId && turn !== undefined && latestActionMessage.get(`${turn}:${name}`) !== message.id ? [toolPart.toolCallId] : [];
 								}))}
 								questionnaireTurnStatuses={questionnaireTurnStatuses}
 							/>

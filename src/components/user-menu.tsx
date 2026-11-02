@@ -2,9 +2,11 @@ import { useClerk, useUser } from "@clerk/tanstack-react-start";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
+	ArrowUpRight,
 	ChevronsUpDown,
 	House,
 	LogOut,
+	MessageSquareText,
 	Settings,
 	UserRound,
 } from "lucide-react";
@@ -91,17 +93,37 @@ export function UserMenu() {
 				/>
 				<DropdownMenuContent align="start" className="w-(--anchor-width)" side="top" sideOffset={8}>
 					<DropdownMenuGroup>
-						<DropdownMenuItem className="cursor-pointer" onClick={() => openSettings("account")}>
-							<Settings aria-hidden="true" />
-							<span>Settings</span>
+						<DropdownMenuItem className="cursor-pointer" onClick={() => void navigate({ to: "/" })}>
+							<House aria-hidden="true" />
+							<span>Homepage</span>
 						</DropdownMenuItem>
+					</DropdownMenuGroup>
+					<DropdownMenuSeparator />
+					<DropdownMenuGroup>
 						<DropdownMenuItem className="cursor-pointer" onClick={() => openSettings("account")}>
 							<UserRound aria-hidden="true" />
 							<span>Account</span>
 						</DropdownMenuItem>
-						<DropdownMenuItem className="cursor-pointer" onClick={() => void navigate({ to: "/" })}>
-							<House aria-hidden="true" />
-							<span>Homepage</span>
+						<DropdownMenuItem className="cursor-pointer" onClick={() => openSettings("account")}>
+							<Settings aria-hidden="true" />
+							<span>Settings</span>
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							className="cursor-pointer"
+							render={
+								<a
+									href="https://phixr.userjot.com/"
+									rel="noreferrer"
+									target="_blank"
+								/>
+							}
+						>
+							<MessageSquareText aria-hidden="true" />
+							<span className="flex-1">Feedback</span>
+							<ArrowUpRight
+								aria-hidden="true"
+								className="size-3.5! text-muted-foreground"
+							/>
 						</DropdownMenuItem>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />

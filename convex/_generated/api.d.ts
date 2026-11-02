@@ -8,10 +8,16 @@
  * @module
  */
 
+import type * as backfill from "../backfill.js";
+import type * as email from "../email.js";
 import type * as guides from "../guides.js";
+import type * as http from "../http.js";
 import type * as messages from "../messages.js";
+import type * as onboarding from "../onboarding.js";
+import type * as polar from "../polar.js";
 import type * as questionnaires from "../questionnaires.js";
 import type * as sessions from "../sessions.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -20,10 +26,16 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  backfill: typeof backfill;
+  email: typeof email;
   guides: typeof guides;
+  http: typeof http;
   messages: typeof messages;
+  onboarding: typeof onboarding;
+  polar: typeof polar;
   questionnaires: typeof questionnaires;
   sessions: typeof sessions;
+  users: typeof users;
 }>;
 
 /**
@@ -52,4 +64,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workflow: import("@convex-dev/workflow/_generated/component.js").ComponentApi<"workflow">;
+};

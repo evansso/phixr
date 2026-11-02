@@ -16,6 +16,7 @@ import {
 	MessageScrollerViewport,
 } from "#/components/ui/message-scroller";
 import { cn } from "#/lib/utils";
+import { SessionStatusIcon, sessionStatusDisplay } from "@/components/session-status";
 import { AgentHeader } from "./agent-header";
 import { AgentChatInput } from "./chat-input";
 import { useChatSession } from "./chat-session-store";
@@ -91,6 +92,7 @@ export function AgentChat({
 			? initialMessages
 			: queriedMessages?.messages ?? EMPTY_MESSAGES;
 	const title = queriedMessages?.title ?? initialTitle ?? "New chat";
+	const sessionStatus = queriedMessages?.status ?? "active";
 	const loadingMessages = Boolean(
 		chatId &&
 			!isUnpersistedSession &&
@@ -116,6 +118,7 @@ export function AgentChat({
 				pendingMessage={pendingMessage}
 				setSessionMessages={setSessionMessages}
 				setPendingMessage={setPendingMessage}
+				sessionStatus={sessionStatus}
 				title={title}
 			>
 				{children}
@@ -133,6 +136,7 @@ function AgentChatContent({
 	isNewChat,
 	loadingMessages,
 	pendingMessage,
+	sessionStatus,
 	title,
 	setSessionMessages,
 	setPendingMessage,
@@ -145,6 +149,7 @@ function AgentChatContent({
 	isNewChat: boolean;
 	loadingMessages: boolean;
 	pendingMessage: { text: string; attachments: Array<{ url: string; filename: string; mediaType: string }> } | null;
+	sessionStatus: "active" | "resolved" | "archived";
 	title: string;
 	setSessionMessages: (messages: UIMessage[]) => void;
 	setPendingMessage: (message: { text: string; attachments: Array<{ url: string; filename: string; mediaType: string }> } | null) => void;
@@ -254,6 +259,22 @@ function AgentChatContent({
 	const showNewChat = isNewChat && chatMessages.length === 0;
 	const waitingForInitialMessages = loadingMessages && chatMessages.length === 0;
 	const currentTitle = streamedChatTitle?.title ?? title;
+	// Derived from the live message state (same rule as the sidebar's
+	// backend derivation) so the header icon updates as cards appear
+	// and are answered, without waiting on a history refetch.
+	const lastAssistant = [...chatMessages].reverse().find((message) => message.role === "assistant");
+	const awaitingUser = Boolean(
+		lastAssistant?.parts.some((part) => {
+			const tool = part as UIMessage["parts"][number] & { toolName?: string; state?: string };
+			const name = tool.toolName ?? tool.type.replace(/^tool-/, "");
+			return (
+				(name === "askUserQuestionnaire" || name === "guide_steps" || name === "propose_resolution") &&
+				tool.state !== "output-available" &&
+				tool.state !== "output-error"
+			);
+		})
+	);
+	const statusDisplay = sessionStatusDisplay({ status: sessionStatus, awaitingUser });
 
 	return (
 		<section className={cn("relative flex min-h-0 w-full flex-1 flex-col", className)}>
@@ -261,7 +282,11 @@ function AgentChatContent({
 			{showNewChat ? null : (
 				<AgentHeader className="sticky top-0 z-10 justify-center bg-background text-sm">
 					{showSidebarTrigger && <SidebarTrigger className="absolute top-1/2 left-3 -translate-y-1/2" size="icon-xs" />}
-					{currentTitle}
+					<span className="flex min-w-0 items-center justify-center gap-2" title={statusDisplay.label}>
+						<SessionStatusIcon awaitingUser={awaitingUser} status={sessionStatus} />
+						<span className="min-w-0 truncate">{currentTitle}</span>
+						<span className="sr-only">({statusDisplay.label})</span>
+					</span>
 				</AgentHeader>
 			)}
 			<AnimatePresence mode="wait">
