@@ -110,6 +110,16 @@ export default defineSchema({
 		.index("by_user_status", ["userId", "status"])
 		.index("by_turn", ["turnId"])
 		.index("by_session", ["sessionId"]),
+	credit_grants: defineTable({
+		userId: v.string(),
+		units: v.number(),
+		rollover: v.boolean(),
+		reason: v.optional(v.string()),
+		source: v.union(v.literal("polar"), v.literal("local")),
+		polarEventId: v.optional(v.string()),
+		externalId: v.string(),
+		createdAt: v.number(),
+	}).index("by_user", ["userId"]),
 	ai_usage: defineTable({
 		userId: v.string(),
 		sessionId: v.id("sessions"),

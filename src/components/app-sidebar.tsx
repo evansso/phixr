@@ -12,6 +12,7 @@ import {
 } from "@/components/session-status";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo } from "@/components/logo";
+import { CreditsNotice } from "@/components/credits-notice";
 import { UserMenu } from "@/components/user-menu";
 import { toast } from "#/lib/toast";
 import { useChatSession } from "@/components/agent-sdk/chat-session-store";
@@ -505,6 +506,9 @@ export function AppSidebar() {
 			</SidebarContent>
 
 			<SidebarFooter>
+				<Show when="signed-in">
+					<CreditsNotice />
+				</Show>
 				<div className="flex min-h-10 items-center py-1">
 					<Show when="signed-in">
 						<UserMenu />

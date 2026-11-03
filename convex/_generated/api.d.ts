@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as messages from "../messages.js";
 import type * as onboarding from "../onboarding.js";
 import type * as polar from "../polar.js";
+import type * as polarEvents from "../polarEvents.js";
 import type * as questionnaires from "../questionnaires.js";
 import type * as sessions from "../sessions.js";
 import type * as users from "../users.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   onboarding: typeof onboarding;
   polar: typeof polar;
+  polarEvents: typeof polarEvents;
   questionnaires: typeof questionnaires;
   sessions: typeof sessions;
   users: typeof users;

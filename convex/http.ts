@@ -104,4 +104,107 @@ http.route({
 	}),
 });
 
+const POLAR_SYNC_EVENTS = new Set([
+	"customer.state_changed",
+	"customer.updated",
+	"customer.deleted",
+	"subscription.created",
+	"subscription.updated",
+	"subscription.active",
+	"subscription.canceled",
+	"subscription.uncanceled",
+	"subscription.cycled",
+	"subscription.revoked",
+	"subscription.past_due",
+	"benefit_grant.created",
+	"benefit_grant.cycled",
+	"benefit_grant.updated",
+	"benefit_grant.revoked",
+]);
+
+type PolarEvent = {
+	type: string;
+	data?: {
+		external_id?: string | null;
+		customer?: { external_id?: string | null } | null;
+		metadata?: Record<string, unknown> | null;
+	};
+};
+
+function polarClerkUserId(event: PolarEvent): string | null {
+	const data = event.data;
+	if (!data) {
+		return null;
+	}
+	if (typeof data.external_id === "string" && data.external_id) {
+		return data.external_id;
+	}
+	if (typeof data.customer?.external_id === "string" && data.customer.external_id) {
+		return data.customer.external_id;
+	}
+	const fromMetadata = data.metadata?.clerkUserId;
+	return typeof fromMetadata === "string" && fromMetadata ? fromMetadata : null;
+}
+
+http.route({
+	path: "/webhooks/polar",
+	method: "POST",
+	handler: httpAction(async (ctx, request) => {
+		const secret = process.env.POLAR_WEBHOOK_SECRET;
+		if (!secret) {
+			return new Response("POLAR_WEBHOOK_SECRET is not configured", {
+				status: 500,
+			});
+		}
+		// Polar signs with Standard Webhooks, which Svix implements.
+		const webhookId = request.headers.get("webhook-id");
+		const webhookTimestamp = request.headers.get("webhook-timestamp");
+		const webhookSignature = request.headers.get("webhook-signature");
+		if (!webhookId || !webhookTimestamp || !webhookSignature) {
+			return new Response("Missing webhook headers", { status: 400 });
+		}
+
+		const body = await request.text();
+		try {
+			new Webhook(secret).verify(body, {
+				"svix-id": webhookId,
+				"svix-timestamp": webhookTimestamp,
+				"svix-signature": webhookSignature,
+			});
+		} catch {
+			return new Response("Invalid webhook signature", { status: 400 });
+		}
+
+		let event: PolarEvent;
+		try {
+			const parsed: unknown = JSON.parse(body);
+			if (
+				typeof parsed !== "object" ||
+				parsed === null ||
+				typeof (parsed as { type?: unknown }).type !== "string"
+			) {
+				return new Response("Invalid webhook payload", { status: 400 });
+			}
+			event = parsed as PolarEvent;
+		} catch {
+			return new Response("Invalid webhook payload", { status: 400 });
+		}
+
+		if (!POLAR_SYNC_EVENTS.has(event.type)) {
+			return new Response(null, { status: 200 });
+		}
+		const clerkUserId = polarClerkUserId(event);
+		if (!clerkUserId) {
+			return new Response(null, { status: 200 });
+		}
+
+		await ctx.runMutation(internal.polarEvents.enqueuePolarEvent, {
+			clerkUserId,
+			eventType: event.type,
+		});
+
+		return new Response(null, { status: 200 });
+	}),
+});
+
 export default http;

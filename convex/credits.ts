@@ -379,6 +379,24 @@ export const backfillExistingUsers = internalAction({
 	},
 });
 
+export const recordGrant = internalMutation({
+	args: {
+		userId: v.string(),
+		units: v.number(),
+		rollover: v.boolean(),
+		reason: v.optional(v.string()),
+		source: v.union(v.literal("polar"), v.literal("local")),
+		polarEventId: v.optional(v.string()),
+		externalId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		return await ctx.db.insert("credit_grants", {
+			...args,
+			createdAt: Date.now(),
+		});
+	},
+});
+
 export const upsertAccount = internalMutation({
 	args: {
 		userId: v.string(),

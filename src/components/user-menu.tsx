@@ -1,6 +1,5 @@
 import { useClerk, useUser } from "@clerk/tanstack-react-start";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 import {
 	ArrowUpRight,
 	ChevronsUpDown,
@@ -10,10 +9,8 @@ import {
 	Settings,
 	UserRound,
 } from "lucide-react";
-import {
-	type SettingsTab,
-	SettingsDialog,
-} from "@/components/settings-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
+import { useSettings } from "@/components/settings-store";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -28,13 +25,11 @@ export function UserMenu() {
 	const { user, isLoaded } = useUser();
 	const { signOut } = useClerk();
 	const navigate = useNavigate();
-	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
-
-	const openSettings = (tab: SettingsTab) => {
-		setSettingsTab(tab);
-		setSettingsOpen(true);
-	};
+	const settingsOpen = useSettings((state) => state.open);
+	const settingsTab = useSettings((state) => state.tab);
+	const setSettingsOpen = useSettings((state) => state.setOpen);
+	const setSettingsTab = useSettings((state) => state.setTab);
+	const openSettings = useSettings((state) => state.openSettings);
 
 	if (!isLoaded) {
 		return (

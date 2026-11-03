@@ -249,6 +249,80 @@ export const syncCreditBalance = internalAction({
 	},
 });
 
+export const grantCredits = internalAction({
+	args: {
+		clerkUserId: v.string(),
+		units: v.number(),
+		rollover: v.optional(v.boolean()),
+		reason: v.optional(v.string()),
+		externalId: v.optional(v.string()),
+	},
+	handler: async (
+		ctx,
+		{ clerkUserId, units, rollover, reason, externalId }
+	): Promise<{ granted: number; balance: number | null }> => {
+		if (!Number.isInteger(units) || units < 1 || units > 10_000) {
+			throw new Error("units must be a whole number between 1 and 10000");
+		}
+		const { polarCustomerId } = await ctx.runAction(
+			internal.polar.ensureCustomer,
+			{ clerkUserId }
+		);
+		await ctx.runAction(internal.polar.ensureBetaSubscription, {
+			clerkUserId,
+		});
+		const meterId = creditsMeterId();
+		const grantExternalId =
+			externalId ?? `grant-${clerkUserId}-${Date.now()}`;
+		const base =
+			process.env.POLAR_SERVER === "production"
+				? "https://api.polar.sh"
+				: "https://sandbox-api.polar.sh";
+		const accessToken = process.env.POLAR_ACCESS_TOKEN;
+		if (!accessToken) {
+			throw new Error("POLAR_ACCESS_TOKEN is not configured");
+		}
+		const response = await fetch(`${base}/v1/customer-meters/credits`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${accessToken}`,
+				"Content-Type": "application/json",
+				"Polar-Version": "2027-01",
+			},
+			body: JSON.stringify({
+				customer_id: polarCustomerId,
+				meter_id: meterId,
+				units,
+				rollover: rollover ?? false,
+				external_id: grantExternalId,
+			}),
+		});
+		const payload = (await response.json().catch(() => null)) as {
+			id?: string;
+			detail?: unknown;
+		} | null;
+		if (!response.ok) {
+			throw new Error(
+				`Polar credit grant failed (${response.status}): ${JSON.stringify(payload?.detail ?? payload).slice(0, 300)}`
+			);
+		}
+		await ctx.runMutation(internal.credits.recordGrant, {
+			userId: clerkUserId,
+			units,
+			rollover: rollover ?? false,
+			reason,
+			source: "polar",
+			polarEventId: payload?.id,
+			externalId: grantExternalId,
+		});
+		await ctx.runAction(internal.polar.syncCreditBalance, { clerkUserId });
+		const account = await ctx.runQuery(internal.credits.getAccountByUser, {
+			userId: clerkUserId,
+		});
+		return { granted: units, balance: account.balance };
+	},
+});
+
 export const ingestCreditUsage = internalAction({
 	args: { creditTurnId: v.id("credit_turns") },
 	handler: async (ctx, { creditTurnId }): Promise<null> => {
