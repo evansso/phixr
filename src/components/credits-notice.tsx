@@ -53,57 +53,67 @@ export function CreditsNotice() {
 	const creditedLabel = credited.toLocaleString();
 
 	return (
-		<AnimatePresence>
+		<AnimatePresence initial={false}>
 			{visible ? (
 				<motion.div
-					animate={{ opacity: 1, y: 0 }}
-					className="relative mb-2 rounded-lg border border-sidebar-border bg-background p-3 text-foreground shadow-sm"
-					exit={{ opacity: 0, y: 8 }}
-					initial={{ opacity: 0, y: 16 }}
-					transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+					animate={{ height: "auto", opacity: 1 }}
+					className="overflow-hidden"
+					exit={{ height: 0, opacity: 0 }}
+					initial={{ height: 0, opacity: 0 }}
+					transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
 				>
-					<button
-						aria-label="Dismiss credits notice"
-						className="absolute top-2 right-2 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						onClick={() => dismiss(periodKey)}
-						type="button"
-					>
-						<X aria-hidden="true" className="size-3.5" />
-					</button>
-					<button
-						className="block w-full cursor-pointer text-left"
-						onClick={() => openSettings("billing")}
-						type="button"
-					>
-						<p className="font-semibold text-sm">
-							{percent}% usage remaining
-						</p>
-						<p className="mt-0.5 text-muted-foreground text-xs tabular-nums">
-							{availableLabel} of {creditedLabel} credits left
-						</p>
-						<p className="mt-0.5 pr-5 text-muted-foreground text-xs">
-							Resets every month
-							{resetLabel ? ` · Next reset is on ${resetLabel}` : ""}
-						</p>
-						<div
-							aria-hidden="true"
-							className="mt-2.5 h-1.5 w-full overflow-hidden rounded-sm bg-zinc-300 dark:bg-zinc-600"
+					<div className="pb-2">
+						<motion.div
+							animate={{ opacity: 1, y: 0 }}
+							className="relative rounded-lg border border-sidebar-border bg-background p-3 text-foreground shadow-sm"
+							exit={{ opacity: 0, y: 4 }}
+							initial={{ opacity: 0, y: 8 }}
+							transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
 						>
-							<motion.div
-								animate={{ width: `${percent}%` }}
-								className={`h-full rounded-sm ${
-									exhausted ? "bg-destructive" : "bg-amber-500"
-								}`}
-								initial={{ width: 0 }}
-								transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-							/>
-						</div>
-						{exhausted ? (
-							<p className="mt-1.5 text-destructive text-xs">
-								New messages are paused until your credits reset.
+						<button
+							aria-label="Dismiss credits notice"
+							className="absolute top-2 right-2 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							onClick={() => dismiss(periodKey)}
+							type="button"
+						>
+							<X aria-hidden="true" className="size-3.5" />
+						</button>
+						<button
+							className="block w-full cursor-pointer text-left"
+							onClick={() => openSettings("billing")}
+							type="button"
+						>
+							<p className="font-semibold text-sm">
+								{percent}% usage remaining
 							</p>
-						) : null}
-					</button>
+							<p className="mt-0.5 text-muted-foreground text-xs tabular-nums">
+								{availableLabel} of {creditedLabel} credits left
+							</p>
+							<p className="mt-0.5 pr-5 text-muted-foreground text-xs">
+								Resets every month
+								{resetLabel ? ` · Next reset is on ${resetLabel}` : ""}
+							</p>
+							<div
+								aria-hidden="true"
+								className="mt-2.5 h-1.5 w-full overflow-hidden rounded-sm bg-zinc-300 dark:bg-zinc-600"
+							>
+								<motion.div
+									animate={{ width: `${percent}%` }}
+									className={`h-full rounded-sm ${
+										exhausted ? "bg-destructive" : "bg-amber-500"
+									}`}
+									initial={false}
+									transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+								/>
+							</div>
+							{exhausted ? (
+								<p className="mt-1.5 text-destructive text-xs">
+									New messages are paused until your credits reset.
+								</p>
+							) : null}
+						</button>
+						</motion.div>
+					</div>
 				</motion.div>
 			) : null}
 		</AnimatePresence>
