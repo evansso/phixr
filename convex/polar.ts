@@ -172,6 +172,116 @@ export const ensureBetaSubscription = internalAction({
 	},
 });
 
+function creditsMeterId() {
+	const meterId = process.env.POLAR_CREDITS_METER_ID?.trim();
+	if (!meterId) {
+		throw new Error("POLAR_CREDITS_METER_ID is not configured");
+	}
+	return meterId;
+}
+
+export const syncCreditBalance = internalAction({
+	args: { clerkUserId: v.string() },
+	handler: async (ctx, { clerkUserId }): Promise<null> => {
+		const polar = getPolar();
+		const meterId = creditsMeterId();
+		// Primary: Customer State (customers:read scope, which the app
+		// token already has). customerMeters.list needs a separate scope
+		// the current token lacks, so it is only a fallback.
+		let meter: {
+			credited_units: number;
+			consumed_units: number;
+			balance: number;
+		} | null = null;
+		let periodEnd: number | undefined;
+		try {
+			const state = await polar.customers.getStateExternal(clerkUserId);
+			const active = state.active_meters?.find(
+				(m) => m.meter_id === meterId
+			);
+			if (active) {
+				meter = active;
+			}
+			const sub = state.active_subscriptions?.[0] as
+				| { current_period_end?: string | null }
+				| undefined;
+			if (sub?.current_period_end) {
+				const parsed = Date.parse(sub.current_period_end);
+				if (!Number.isNaN(parsed)) {
+					periodEnd = parsed;
+				}
+			}
+		} catch {
+			// Fall through to the Customer Meters API.
+		}
+		if (!meter) {
+			const listed = await polar.customerMeters.list({
+				external_customer_id: clerkUserId,
+				meter_id: meterId,
+				limit: 10,
+			});
+			meter = listed.items[0] ?? null;
+		}
+		if (!meter) {
+			return null;
+		}
+		await ctx.runMutation(internal.credits.upsertAccount, {
+			userId: clerkUserId,
+			creditedUnits: meter.credited_units,
+			consumedUnits: meter.consumed_units,
+			balance: meter.balance,
+			periodEnd,
+		});
+		// Self-heal: if event ingestion failed earlier (e.g. Polar token
+		// scopes), retry now that a sync was requested.
+		await ctx.runMutation(internal.credits.requeueFailedIngests, {
+			userId: clerkUserId,
+		});
+		return null;
+	},
+});
+
+export const ingestCreditUsage = internalAction({
+	args: { creditTurnId: v.id("credit_turns") },
+	handler: async (ctx, { creditTurnId }): Promise<null> => {
+		const turn = await ctx.runQuery(internal.credits.getTurn, {
+			creditTurnId,
+		});
+		if (!turn || turn.chargedCredits < 1 || turn.polarStatus === "ingested") {
+			return null;
+		}
+		const polar = getPolar();
+		creditsMeterId();
+		try {
+			// The Polar meter aggregates with Count, so one event = one
+			// credit. external_id makes retries idempotent in Polar.
+			await polar.events.ingest({
+				events: Array.from({ length: turn.chargedCredits }, (_, i) => ({
+					name: "phixr_credit_used",
+					external_customer_id: turn.userId,
+					external_id: `${turn.turnId}:${i + 1}`,
+					metadata: {
+						turnId: turn.turnId,
+						sessionId: String(turn.sessionId),
+						seq: i + 1,
+						bandCredits: turn.chargedCredits,
+						band: turn.band ?? turn.chargedCredits,
+						exaCalls: turn.exaCalls,
+					},
+				})),
+			});
+		} catch (error) {
+			await ctx.runMutation(internal.credits.markIngestFailed, {
+				creditTurnId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return null;
+		}
+		await ctx.runMutation(internal.credits.markIngested, { creditTurnId });
+		return null;
+	},
+});
+
 export const revokeBetaSubscription = internalAction({
 	args: { clerkUserId: v.string() },
 	handler: async (ctx, { clerkUserId }): Promise<null> => {

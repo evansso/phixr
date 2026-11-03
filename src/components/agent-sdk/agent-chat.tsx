@@ -155,6 +155,17 @@ function AgentChatContent({
 	setPendingMessage: (message: { text: string; attachments: Array<{ url: string; filename: string; mediaType: string }> } | null) => void;
 }) {
 	const { getToken, isLoaded: clerkLoaded, isSignedIn } = useAuth();
+	const { isAuthenticated: convexAuthed } = useConvexAuth();
+	const credits = useQuery(api.credits.getMyCredits, convexAuthed ? {} : "skip");
+	const creditsExhausted =
+		credits?.available !== null &&
+		credits?.available !== undefined &&
+		credits.available <= 0;
+	const creditsLow =
+		!creditsExhausted &&
+		credits?.available !== null &&
+		credits?.available !== undefined &&
+		credits.available < 20;
 	const { isMobile, open, openMobile } = useSidebar();
 	const showSidebarTrigger = isMobile ? !openMobile : !open;
 	const navigate = useNavigate();
@@ -221,7 +232,8 @@ function AgentChatContent({
 			isNewChat ||
 			!clerkLoaded ||
 			!isSignedIn ||
-			pendingHandledRef.current
+			pendingHandledRef.current ||
+			creditsExhausted
 		)
 			return;
 		pendingHandledRef.current = true;
@@ -243,9 +255,10 @@ function AgentChatContent({
 		pendingMessage,
 		sendMessage,
 		setPendingMessage,
+		creditsExhausted,
 	]);
 	const handleNewChatSubmit = (text: string, attachments: Array<{ url: string; filename: string; mediaType: string }> = []) => {
-		if (!isNewChat) return;
+		if (!isNewChat || creditsExhausted) return;
 		const chatId = sessionIdRef.current ?? crypto.randomUUID();
 		sessionIdRef.current = chatId;
 		setSessionId(chatId);
@@ -328,8 +341,22 @@ function AgentChatContent({
 				)}
 			</AnimatePresence>
 			<div className="shrink-0 px-4 pb-4">
+				{(creditsExhausted || creditsLow) && (
+					<div
+						className={`mx-auto mb-2 w-full max-w-[45rem] rounded-md border px-3 py-2 text-center text-xs ${
+							creditsExhausted
+								? "border-destructive/40 text-destructive"
+								: "border-amber-500/40 text-amber-600 dark:text-amber-400"
+						}`}
+						role="status"
+					>
+						{creditsExhausted
+							? "You're out of Phixr credits for this period. New messages are paused until they reset — open Settings → Billing for details."
+							: `You have ${credits?.available} credits left this period. A message costs 1–3 credits.`}
+					</div>
+				)}
 				<AgentChatInput
-					disabled={waitingForInitialMessages}
+					disabled={waitingForInitialMessages || creditsExhausted}
 					layout="adaptive"
 					onSubmit={isNewChat ? handleNewChatSubmit : undefined}
 				/>

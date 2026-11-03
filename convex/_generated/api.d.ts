@@ -9,6 +9,7 @@
  */
 
 import type * as backfill from "../backfill.js";
+import type * as credits from "../credits.js";
 import type * as email from "../email.js";
 import type * as guides from "../guides.js";
 import type * as http from "../http.js";
@@ -27,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   backfill: typeof backfill;
+  credits: typeof credits;
   email: typeof email;
   guides: typeof guides;
   http: typeof http;

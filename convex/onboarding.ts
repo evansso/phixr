@@ -82,6 +82,15 @@ export const userLifecycle = workflow
 			{ clerkUserId: args.clerkUserId },
 			{ retry: true }
 		);
+		try {
+			await step.runAction(
+				internal.polar.syncCreditBalance,
+				{ clerkUserId: args.clerkUserId },
+				{ retry: true }
+			);
+		} catch {
+			// Balance cache can be rebuilt on first chat / billing open.
+		}
 		await step.runMutation(internal.users.markProvisioned, {
 			clerkUserId: args.clerkUserId,
 		});

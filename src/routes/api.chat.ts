@@ -50,6 +50,14 @@ const chatRequestSchema = z.object({
 
 const RESEARCH = ["search_web", "fetch_page"];
 const MAX_RESEARCH = 3;
+const ARTIFACT_TOOLS = ["askUserQuestionnaire", "guide_steps", "propose_resolution"];
+const CREDITS_ENABLED = process.env.CREDITS_ENFORCEMENT_ENABLED !== "false";
+
+function creditBand(toolNames: string[]) {
+	if (toolNames.some((name) => RESEARCH.includes(name))) return 3;
+	if (toolNames.some((name) => ARTIFACT_TOOLS.includes(name))) return 2;
+	return 1;
+}
 
 let devToolsRegistration: Promise<void> | undefined;
 
@@ -275,6 +283,27 @@ export const Route = createFileRoute("/api/chat")({
 				}
 				const shouldGenerateTitle = isFirstMessage && message.role === "user";
 				const isRegeneration = parsed.data.trigger === "regenerate-message";
+				const creditTurnId = isRegeneration
+					? `${message.id}:regen:${Date.now()}`
+					: message.id;
+				try {
+					const reservation = await client.mutation(api.credits.reserve, {
+						sessionId,
+						turnId: creditTurnId,
+					});
+					if (CREDITS_ENABLED && !reservation.allowed) {
+						return Response.json(
+							{
+								error:
+									"You're out of Phixr credits for this billing period. Your credits reset at the start of your next period.",
+								code: "insufficient_credits",
+							},
+							{ status: 402 }
+						);
+					}
+				} catch (error) {
+					console.error("Credit reservation failed; continuing", error);
+				}
 				if (!(isRegeneration || alreadySaved)) {
 					await client.mutation(api.messages.append, {
 						sessionId,
@@ -315,6 +344,7 @@ export const Route = createFileRoute("/api/chat")({
 				messages = closedMessages;
 				const modelMessages = await convertToModelMessages(messages);
 				if (modelMessages.length === 0) {
+					await client.mutation(api.credits.release, { turnId: creditTurnId }).catch(() => undefined);
 					return Response.json({ error: "There are no messages to send to the assistant." }, { status: 400 });
 				}
 				const questionnaireCount = await client.query(
@@ -323,9 +353,14 @@ export const Route = createFileRoute("/api/chat")({
 				);
 				const canAskQuestionnaire = questionnaireCount < 4;
 
+				let streamToolNames: string[] = [];
+				let streamUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
+				let streamFinishReason: string | undefined;
+				let streamFailed = false;
 				const stream = createUIMessageStream<UIMessage>({
 					originalMessages: messages,
 					onError: (error) => {
+						streamFailed = true;
 						console.error("Chat UI stream failed", error);
 						return "The assistant couldn't finish this response. Please try again.";
 					},
@@ -371,7 +406,17 @@ export const Route = createFileRoute("/api/chat")({
 							experimental_transform: smoothStream({ chunking: "word" }),
 							stopWhen: stepCountIs(10),
 							onError: ({ error }) => {
+								streamFailed = true;
 								console.error("AI SDK streamText failed", error);
+							},
+							onEnd: ({ toolCalls, usage, finishReason }) => {
+								streamToolNames = toolCalls.flatMap((c) => (c?.toolName ? [c.toolName] : []));
+								streamUsage = usage;
+								streamFinishReason = finishReason;
+							},
+							onAbort: ({ steps }) => {
+								streamFailed = true;
+								streamToolNames = steps.flatMap((step) => step.toolCalls.flatMap((c) => (c?.toolName ? [c.toolName] : [])));
 							},
 							// No forced first step: the model streams plain text and
 							// picks tools itself. Only the per-turn research cap is
@@ -408,6 +453,36 @@ export const Route = createFileRoute("/api/chat")({
 							});
 						} catch (error) {
 							console.error("Failed to save chat message", error);
+						}
+						try {
+							const partToolNames = responseMessage.parts.flatMap((part) => {
+								const c = part as { type?: string; toolName?: string };
+								if (c.toolName) return [c.toolName];
+								if (c.type?.startsWith("tool-")) return [c.type.slice(5)];
+								return [];
+							});
+							const toolNames = [...new Set([...streamToolNames, ...partToolNames])];
+							const band = creditBand(toolNames);
+							const delivered = responseMessage.parts.some((part) => {
+								const c = part as { type?: string; text?: string };
+								return (c.type === "text" && Boolean(c.text?.trim())) || Boolean(c.type?.startsWith("tool-")) || c.type === "dynamic-tool";
+							});
+							const exaCalls = toolNames.filter((n) => RESEARCH.includes(n)).length;
+							await client.mutation(api.credits.settle, {
+								turnId: creditTurnId,
+								sessionId,
+								chargedCredits: CREDITS_ENABLED && delivered ? band : 0,
+								band,
+								toolNames,
+								exaCalls,
+								inputTokens: streamUsage?.inputTokens,
+								outputTokens: streamUsage?.outputTokens,
+								totalTokens: streamUsage?.totalTokens,
+								finishReason: streamFinishReason,
+								outcome: streamFailed ? "failed" : delivered ? "completed" : "released",
+							});
+						} catch (error) {
+							console.error("Failed to settle credits", error);
 						}
 					},
 				});

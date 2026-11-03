@@ -1,5 +1,9 @@
 import { UserProfile } from "@clerk/tanstack-react-start";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { Check, CreditCard, ShieldCheck, UserRound, X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { api } from "../../convex/_generated/api";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/spinner";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +53,33 @@ const FREE_PLAN_FEATURES = [
 ];
 
 function BillingPanel() {
+	const { isAuthenticated } = useConvexAuth();
+	const credits = useQuery(api.credits.getMyCredits, isAuthenticated ? {} : "skip");
+	const refreshCredits = useAction(api.credits.refreshMyCredits);
+	const refreshedRef = useRef(false);
+	useEffect(() => {
+		if (!isAuthenticated || refreshedRef.current) return;
+		refreshedRef.current = true;
+		void refreshCredits({}).catch(() => undefined);
+	}, [isAuthenticated, refreshCredits]);
+
+	const balance = credits?.balance ?? null;
+	const available = credits?.available ?? balance;
+	const credited = credits?.creditedUnits ?? 0;
+	const percent =
+		credited > 0 && available !== null
+			? Math.max(0, Math.min(100, (available / credited) * 100))
+			: 0;
+	const exhausted = available !== null && available <= 0;
+	const low = !exhausted && available !== null && available < 20;
+	const resetLabel = credits?.periodEnd
+		? new Date(credits.periodEnd).toLocaleDateString(undefined, {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
+
 	return (
 		<div className="flex flex-col gap-4 pt-2">
 			<div>
@@ -56,6 +87,62 @@ function BillingPanel() {
 				<p className="text-muted-foreground text-sm">
 					Everything you need to try Phixr and help us improve it.
 				</p>
+			</div>
+
+			<div className="rounded-lg border p-4">
+				{credits === undefined ? (
+					<div className="flex flex-col gap-2">
+						<Skeleton className="h-5 w-40" />
+						<Skeleton className="h-2.5 w-full" />
+						<Skeleton className="h-4 w-56" />
+					</div>
+				) : (
+					<div className="flex flex-col gap-2">
+						<div className="flex items-baseline justify-between gap-3">
+							<p className="font-medium text-sm">AI credits</p>
+							<p className="text-sm tabular-nums">
+								{available === null
+									? "Syncing…"
+									: `${Math.max(0, available)} of ${credited} credits`}
+							</p>
+						</div>
+						<div
+							aria-hidden="true"
+							className="h-2.5 w-full overflow-hidden rounded-full bg-muted"
+						>
+							<div
+								className={`h-full rounded-full transition-all ${
+									exhausted
+										? "bg-destructive"
+										: low
+											? "bg-amber-500"
+											: "bg-green-600 dark:bg-green-400"
+								}`}
+								style={{ width: `${percent}%` }}
+							/>
+						</div>
+						<p className="text-muted-foreground text-xs">
+							{credits?.synced
+								? `${credits.consumedUnits} used this period${resetLabel ? ` · Resets ${resetLabel}` : ""}${credits.reservedCredits ? ` · ${credits.reservedCredits} reserved by an in-progress reply` : ""}`
+								: "Your credit balance is still syncing. Chat remains available."}
+						</p>
+						{exhausted ? (
+							<p className="text-destructive text-xs">
+								You are out of credits. New messages are paused until your
+								credits reset{resetLabel ? ` on ${resetLabel}` : ""}.
+							</p>
+						) : low ? (
+							<p className="text-amber-600 text-xs dark:text-amber-400">
+								You are running low on credits for this period.
+							</p>
+						) : null}
+						<p className="text-muted-foreground text-xs">
+							A message costs 1–3 credits depending on whether Phixr
+							researches the web or builds a guide or questionnaire.
+							Viewing past chats is always free.
+						</p>
+					</div>
+				)}
 			</div>
 
 			<div>

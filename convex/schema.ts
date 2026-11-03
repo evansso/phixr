@@ -67,6 +67,67 @@ export default defineSchema({
 	})
 		.index("by_tool_call", ["toolCallId"])
 		.index("by_session", ["sessionId"]),
+	credit_accounts: defineTable({
+		userId: v.string(),
+		creditedUnits: v.number(),
+		consumedUnits: v.number(),
+		balance: v.number(),
+		periodEnd: v.optional(v.number()),
+		syncedAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_user", ["userId"]),
+	credit_turns: defineTable({
+		userId: v.string(),
+		sessionId: v.id("sessions"),
+		turnId: v.string(),
+		status: v.union(
+			v.literal("reserved"),
+			v.literal("settled"),
+			v.literal("released")
+		),
+		polarStatus: v.union(
+			v.literal("not_required"),
+			v.literal("pending"),
+			v.literal("ingested"),
+			v.literal("failed")
+		),
+		reservedCredits: v.number(),
+		chargedCredits: v.number(),
+		band: v.optional(v.number()),
+		toolNames: v.array(v.string()),
+		exaCalls: v.number(),
+		inputTokens: v.optional(v.number()),
+		outputTokens: v.optional(v.number()),
+		totalTokens: v.optional(v.number()),
+		finishReason: v.optional(v.string()),
+		outcome: v.optional(v.string()),
+		retryCount: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		settledAt: v.optional(v.number()),
+	})
+		.index("by_user_status", ["userId", "status"])
+		.index("by_turn", ["turnId"])
+		.index("by_session", ["sessionId"]),
+	ai_usage: defineTable({
+		userId: v.string(),
+		sessionId: v.id("sessions"),
+		turnId: v.string(),
+		band: v.number(),
+		chargedCredits: v.number(),
+		toolNames: v.array(v.string()),
+		exaCalls: v.number(),
+		inputTokens: v.optional(v.number()),
+		outputTokens: v.optional(v.number()),
+		totalTokens: v.optional(v.number()),
+		finishReason: v.optional(v.string()),
+		outcome: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_user", ["userId"])
+		.index("by_session", ["sessionId"])
+		.index("by_turn", ["turnId"]),
 	guide_step_results: defineTable({
 		sessionId: v.id("sessions"),
 		toolCallId: v.string(),
