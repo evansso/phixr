@@ -26,7 +26,7 @@ const config = defineConfig({
 		devtools(),
 		nitro({
 			features: { websocket: true },
-			serverDir: "./server",
+			scanDirs: ["./server"],
 			rollupConfig: { external: [/^@sentry\//] },
 		}),
 		tailwindcss(),
