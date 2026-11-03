@@ -13,7 +13,7 @@ Instead of dumping a long list of possible fixes, Phixr works like a careful tec
 - **Troubleshooting skills** — loadable playbooks (e.g. Linux Wi-Fi, the troubleshooting loop) the assistant pulls in when relevant
 - **Persistent cases** — every chat is a saved session with its messages, questionnaires, and step results, so context is never lost
 - **Image uploads** — attach screenshots and error photos to your messages (up to 5 MB)
-- **Voice input** — dictate your problem instead of typing (Deepgram)
+- **Voice input** — dictate your problem instead of typing (Meta Muse Voice Transcribe)
 - **Accounts** — sign up and keep your troubleshooting sessions across visits (Clerk)
 
 ## Tech stack
@@ -27,7 +27,7 @@ Instead of dumping a long list of possible fixes, Phixr works like a careful tec
 | AI | Vercel AI SDK streaming chat, Meta Muse model (`muse-wonder-1.0`) via Meta Responses API |
 | Research | [Exa](https://exa.ai/) search + page fetching |
 | File uploads | Upstash Blob (direct browser uploads via signed URLs) |
-| Speech | Deepgram (voice input tokens) |
+| Speech | Meta Muse Voice Transcribe (`muse-voice-transcribe-1.0`, realtime WebSocket via server proxy) |
 | UI | Tailwind CSS 4, shadcn/ui, Base UI, Motion, Lucide icons |
 | Tooling | Bun, TypeScript, Biome (via Ultracite) |
 
@@ -55,10 +55,9 @@ Copy `.env.example` to `.env` and set:
 | `VITE_CONVEX_SITE_URL` | Your Convex site URL |
 | `CONVEX_DEPLOYMENT` | Convex deployment name (set by `convex dev`) |
 | `CONVEX_DEPLOY_KEY` | Convex deploy key (server only) |
-| `MUSE_META_API_KEY` | Meta AI API key for the chat model |
+| `MUSE_META_API_KEY` | Meta AI API key for the chat model and voice transcription |
 | `EXA_API_KEY` | Exa API key for web research |
 | `UPSTASH_BLOB_TOKEN` | Token for a **public** Upstash Blob bucket (image uploads) |
-| `DEEPGRAM_API_KEY` | Deepgram key for voice input |
 | `AI_GATEWAY_API_KEY` | Optional AI Gateway key |
 
 Clerk + Convex wiring: in the Clerk Dashboard, create a JWT template named `convex`, then set `CLERK_JWT_ISSUER_DOMAIN` in your Convex deployment environment. `convex/auth.config.ts` is published when you run `bun run convex:dev`.
@@ -83,7 +82,7 @@ Clerk + Convex wiring: in the Clerk Dashboard, create a JWT template named `conv
 ```
 src/
   routes/          File-based routes: (auth) login/register, (dash) chat UI,
-                   and API routes (api.chat, api.upload, api.dg-token, …)
+                   and API routes (api.chat, api.upload, …)
   components/      Chat UI, agent SDK components, shadcn/ui primitives
   lib/             System prompt, guide-steps & questionnaire tools,
                    web research, troubleshooting skills, uploads

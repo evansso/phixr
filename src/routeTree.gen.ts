@@ -9,13 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as authLayoutRouteImport } from './routes/(auth)/_layout'
 import { Route as dashLayoutRouteImport } from './routes/(dash)/_layout'
 import { Route as marketingLayoutRouteImport } from './routes/(marketing)/_layout'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
-import { Route as ApiDgTokenRouteImport } from './routes/api.dg-token'
 import { Route as ApiUploadRouteImport } from './routes/api.upload'
-import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as dashLayoutNewRouteImport } from './routes/(dash)/_layout.new'
 import { Route as marketingLayoutIndexRouteImport } from './routes/(marketing)/_layout.index'
 import { Route as marketingLayoutWhyRouteImport } from './routes/(marketing)/_layout.why'
@@ -25,6 +24,11 @@ import { Route as authLayoutRegisterSplatRouteImport } from './routes/(auth)/_la
 import { Route as dashLayoutCChatIdRouteImport } from './routes/(dash)/_layout.c.$chatId'
 import { Route as ApiSessionsSessionIdGuidesToolCallIdResultsRouteImport } from './routes/api.sessions.$sessionId.guides.$toolCallId.results'
 
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const authLayoutRoute = authLayoutRouteImport.update({
   id: '/(auth)/_layout',
   getParentRoute: () => rootRouteImport,
@@ -42,19 +46,9 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiDgTokenRoute = ApiDgTokenRouteImport.update({
-  id: '/api/dg-token',
-  path: '/api/dg-token',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiUploadRoute = ApiUploadRouteImport.update({
   id: '/api/upload',
   path: '/api/upload',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FeedbackRoute = FeedbackRouteImport.update({
-  id: '/feedback',
-  path: '/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const dashLayoutNewRoute = dashLayoutNewRouteImport.update({
@@ -102,7 +96,6 @@ const ApiSessionsSessionIdGuidesToolCallIdResultsRoute =
 export interface FileRoutesByFullPath {
   '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/new': typeof dashLayoutNewRoute
   '/why': typeof marketingLayoutWhyRoute
@@ -116,7 +109,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/new': typeof dashLayoutNewRoute
   '/why': typeof marketingLayoutWhyRoute
@@ -129,12 +121,11 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/feedback': typeof FeedbackRoute
   '/(auth)/_layout': typeof authLayoutRouteWithChildren
   '/(dash)/_layout': typeof dashLayoutRouteWithChildren
   '/(marketing)/_layout': typeof marketingLayoutRouteWithChildren
-  '/feedback': typeof FeedbackRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/dg-token': typeof ApiDgTokenRoute
   '/api/upload': typeof ApiUploadRouteWithChildren
   '/(dash)/_layout/new': typeof dashLayoutNewRoute
   '/(marketing)/_layout/why': typeof marketingLayoutWhyRoute
@@ -150,7 +141,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/feedback'
     | '/api/chat'
-    | '/api/dg-token'
     | '/api/upload'
     | '/new'
     | '/why'
@@ -164,7 +154,6 @@ export interface FileRouteTypes {
   to:
     | '/feedback'
     | '/api/chat'
-    | '/api/dg-token'
     | '/api/upload'
     | '/new'
     | '/why'
@@ -176,12 +165,11 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionId/guides/$toolCallId/results'
   id:
     | '__root__'
+    | '/feedback'
     | '/(auth)/_layout'
     | '/(dash)/_layout'
     | '/(marketing)/_layout'
-    | '/feedback'
     | '/api/chat'
-    | '/api/dg-token'
     | '/api/upload'
     | '/(dash)/_layout/new'
     | '/(marketing)/_layout/why'
@@ -199,13 +187,19 @@ export interface RootRouteChildren {
   dashLayoutRoute: typeof dashLayoutRouteWithChildren
   marketingLayoutRoute: typeof marketingLayoutRouteWithChildren
   ApiChatRoute: typeof ApiChatRoute
-  ApiDgTokenRoute: typeof ApiDgTokenRoute
   ApiUploadRoute: typeof ApiUploadRouteWithChildren
   ApiSessionsSessionIdGuidesToolCallIdResultsRoute: typeof ApiSessionsSessionIdGuidesToolCallIdResultsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/(auth)/_layout': {
       id: '/(auth)/_layout'
       path: ''
@@ -227,25 +221,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof marketingLayoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/feedback': {
-      id: '/feedback'
-      path: '/feedback'
-      fullPath: '/feedback'
-      preLoaderRoute: typeof FeedbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/dg-token': {
-      id: '/api/dg-token'
-      path: '/api/dg-token'
-      fullPath: '/api/dg-token'
-      preLoaderRoute: typeof ApiDgTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/upload': {
@@ -374,7 +354,6 @@ const rootRouteChildren: RootRouteChildren = {
   dashLayoutRoute: dashLayoutRouteWithChildren,
   marketingLayoutRoute: marketingLayoutRouteWithChildren,
   ApiChatRoute: ApiChatRoute,
-  ApiDgTokenRoute: ApiDgTokenRoute,
   ApiUploadRoute: ApiUploadRouteWithChildren,
   ApiSessionsSessionIdGuidesToolCallIdResultsRoute:
     ApiSessionsSessionIdGuidesToolCallIdResultsRoute,

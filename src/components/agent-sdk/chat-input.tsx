@@ -30,6 +30,46 @@ type ComposerAttachment = SentAttachment & {
 	error?: string;
 };
 
+const PCM_WORKLET_SOURCE = `
+class PhixrPcmProcessor extends AudioWorkletProcessor {
+	constructor() {
+		super();
+		this.ratio = sampleRate / 24000;
+		this.position = 0;
+		this.pending = new Float32Array(0);
+		this.samples = [];
+	}
+	process(inputs) {
+		const input = inputs[0] && inputs[0][0];
+		if (!input) return true;
+		const buffer = new Float32Array(this.pending.length + input.length);
+		buffer.set(this.pending);
+		buffer.set(input, this.pending.length);
+		let index = this.position;
+		while (index + 1 < buffer.length) {
+			const base = Math.floor(index);
+			const fraction = index - base;
+			this.samples.push(buffer[base] * (1 - fraction) + buffer[base + 1] * fraction);
+			index += this.ratio;
+			if (this.samples.length === 1920) {
+				const pcm = new Int16Array(1920);
+				for (let i = 0; i < 1920; i++) {
+					const value = Math.max(-1, Math.min(1, this.samples[i]));
+					pcm[i] = value < 0 ? value * 32768 : value * 32767;
+				}
+				this.port.postMessage(pcm.buffer, [pcm.buffer]);
+				this.samples = [];
+			}
+		}
+		const consumed = Math.floor(index);
+		this.pending = buffer.slice(consumed);
+		this.position = index - consumed;
+		return true;
+	}
+}
+registerProcessor("phixr-pcm", PhixrPcmProcessor);
+`;
+
 const WAVE_BAR_WIDTH = 4;
 const WAVE_GAP = 2;
 const WAVE_STEP = WAVE_BAR_WIDTH + WAVE_GAP;
@@ -142,7 +182,9 @@ export function AgentChatInput({
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const inputRef = useRef<HTMLDivElement>(null);
 	const wsRef = useRef<WebSocket | null>(null);
-	const recorderRef = useRef<MediaRecorder | null>(null);
+	const workletRef = useRef<AudioWorkletNode | null>(null);
+	const finishingRef = useRef(false);
+	const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const dictationStartValueRef = useRef<ComposerValue>([]);
@@ -167,92 +209,29 @@ export function AgentChatInput({
 	const hasPendingUploads = attachments.some((attachment) => attachment.status === "uploading");
 	const completedAttachments = attachments.filter((attachment) => attachment.status === "done");
 	const submitDisabled = disabled || submitting || streaming || hasPendingUploads || (!text && completedAttachments.length === 0);
-	const stopDictation = useCallback(() => {
-		setConnecting(false);
-		const recorder = recorderRef.current;
-		recorderRef.current = null;
+	const stopCapture = useCallback(() => {
+		workletRef.current?.disconnect();
+		workletRef.current = null;
 		streamRef.current?.getTracks().forEach((track) => track.stop());
 		streamRef.current = null;
 		if (audioContextRef.current && audioContextRef.current.state !== "closed") void audioContextRef.current.close();
 		audioContextRef.current = null;
 		setWaveformAnalyser(null);
+	}, []);
+	const stopDictation = useCallback(() => {
+		if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
+		finishTimeoutRef.current = null;
+		finishingRef.current = false;
+		setConnecting(false);
+		stopCapture();
 		const socket = wsRef.current;
 		wsRef.current = null;
-		const closeSocket = () => {
-			if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "CloseStream" }));
-			if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
-		};
-		if (recorder && recorder.state !== "inactive") {
-			recorder.onstop = closeSocket;
-			recorder.stop();
-		} else closeSocket();
+		if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
 		setListening(false);
-	}, []);
-	const startDictation = useCallback(async () => {
-		if (connecting || listening) return;
-		setConnecting(true);
-		setDictationText("");
-		setInterim("");
-		dictationTextRef.current = "";
-		interimRef.current = "";
-		try {
-			dictationStartValueRef.current = value;
-			const response = await fetch("/api/dg-token", { method: "POST" });
-			if (!response.ok) throw new Error("Could not get a Deepgram token");
-			const { token } = await response.json() as { token: string };
-			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-			streamRef.current = stream;
-			const audioContext = new AudioContext();
-			const source = audioContext.createMediaStreamSource(stream);
-			const analyser = audioContext.createAnalyser();
-			analyser.fftSize = 1024;
-			source.connect(analyser);
-			audioContextRef.current = audioContext;
-			setWaveformAnalyser(analyser);
-			const mimeType = ["audio/webm;codecs=opus", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type));
-			if (!mimeType) throw new Error("This browser does not support audio recording");
-			const query = new URLSearchParams({ model: "nova-3", interim_results: "true", smart_format: "true", endpointing: "300", ...(mimeType.includes("webm") ? { encoding: "opus" } : { encoding: "aac" }) });
-			const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${query}`, ["bearer", token]);
-			wsRef.current = socket;
-			socket.onopen = () => {
-				const recorder = new MediaRecorder(stream, { mimeType });
-				recorderRef.current = recorder;
-				recorder.ondataavailable = (event) => { if (event.data.size && socket.readyState === WebSocket.OPEN) socket.send(event.data); };
-				recorder.start(250);
-				setConnecting(false);
-				setListening(true);
-			};
-			socket.onmessage = (event) => {
-				const data = JSON.parse(event.data) as { channel?: { alternatives?: Array<{ transcript?: string }> }; is_final?: boolean };
-				const transcript = data.channel?.alternatives?.[0]?.transcript?.trim() ?? "";
-				if (!transcript) return;
-				if (data.is_final) {
-					dictationTextRef.current = `${dictationTextRef.current}${dictationTextRef.current ? " " : ""}${transcript}`;
-					setDictationText(dictationTextRef.current);
-					interimRef.current = "";
-					setInterim("");
-				} else {
-					interimRef.current = transcript;
-					setInterim(transcript);
-				}
-			};
-			socket.onerror = () => {
-				stopDictation();
-				toast.error("Something went wrong connecting to the microphone");
-			};
-			socket.onclose = () => {
-				if (wsRef.current === socket) {
-					stopDictation();
-					toast.error("Something went wrong connecting to the microphone");
-				}
-			};
-		} catch {
-			stopDictation();
-			toast.error("Something went wrong connecting to the microphone");
-		}
-	}, [connecting, listening, setValue, stopDictation, value]);
-	const finishDictation = useCallback(() => {
-		const transcript = [dictationTextRef.current, interimRef.current].filter(Boolean).join(" ").trim();
+	}, [stopCapture]);
+	const commitDictation = useCallback(() => {
+		// Muse's final event carries the whole turn, so it replaces any interim text.
+		const transcript = (dictationTextRef.current || interimRef.current).trim();
 		stopDictation();
 		if (transcript) {
 			setValue((current) => [...current, { type: "text", text: `${getComposerText(current) ? " " : ""}${transcript}` }]);
@@ -262,6 +241,112 @@ export function AgentChatInput({
 		setDictationText("");
 		setInterim("");
 	}, [setValue, stopDictation]);
+	const startDictation = useCallback(async () => {
+		if (connecting || listening) return;
+		setConnecting(true);
+		setDictationText("");
+		setInterim("");
+		dictationTextRef.current = "";
+		interimRef.current = "";
+		finishingRef.current = false;
+		try {
+			dictationStartValueRef.current = value;
+			if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext?.prototype.audioWorklet) throw new Error("Audio capture is not supported");
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			streamRef.current = stream;
+			const audioContext = new AudioContext();
+			audioContextRef.current = audioContext;
+			const source = audioContext.createMediaStreamSource(stream);
+			const analyser = audioContext.createAnalyser();
+			analyser.fftSize = 1024;
+			source.connect(analyser);
+			setWaveformAnalyser(analyser);
+			const workletUrl = URL.createObjectURL(new Blob([PCM_WORKLET_SOURCE], { type: "text/javascript" }));
+			try {
+				await audioContext.audioWorklet.addModule(workletUrl);
+			} finally {
+				URL.revokeObjectURL(workletUrl);
+			}
+			const worklet = new AudioWorkletNode(audioContext, "phixr-pcm");
+			workletRef.current = worklet;
+			const silence = audioContext.createGain();
+			silence.gain.value = 0;
+			source.connect(worklet);
+			worklet.connect(silence);
+			silence.connect(audioContext.destination);
+			const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+			const socket = new WebSocket(`${protocol}//${window.location.host}/api/asr`);
+			wsRef.current = socket;
+			worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+				if (socket.readyState === WebSocket.OPEN) socket.send(event.data);
+			};
+			socket.onopen = () => {
+				setConnecting(false);
+				setListening(true);
+			};
+			socket.onmessage = (event) => {
+				if (typeof event.data !== "string") return;
+				let data: { type?: string; transcript?: string; final?: boolean; sessionId?: string };
+				try {
+					data = JSON.parse(event.data) as typeof data;
+				} catch {
+					return;
+				}
+				if (data.type === "error") {
+					stopDictation();
+					toast.error("Something went wrong connecting to the microphone");
+					return;
+				}
+				if (data.type !== "transcript") return;
+				const transcript = data.transcript?.trim() ?? "";
+				if (!transcript) return;
+				if (data.final) {
+					dictationTextRef.current = transcript;
+					setDictationText(transcript);
+					interimRef.current = "";
+					setInterim("");
+					if (finishingRef.current) commitDictation();
+				} else {
+					interimRef.current = transcript;
+					setInterim(transcript);
+				}
+			};
+			socket.onerror = () => {
+				if (wsRef.current !== socket) return;
+				stopDictation();
+				toast.error("Something went wrong connecting to the microphone");
+			};
+			socket.onclose = () => {
+				if (wsRef.current !== socket) return;
+				wsRef.current = null;
+				if (finishingRef.current) {
+					commitDictation();
+				} else {
+					stopDictation();
+					toast.error("Something went wrong connecting to the microphone");
+				}
+			};
+		} catch {
+			stopDictation();
+			toast.error("Something went wrong connecting to the microphone");
+		}
+	}, [commitDictation, connecting, listening, stopDictation, value]);
+	const finishDictation = useCallback(() => {
+		if (finishingRef.current) {
+			commitDictation();
+			return;
+		}
+		const socket = wsRef.current;
+		if (!socket || socket.readyState !== WebSocket.OPEN) {
+			commitDictation();
+			return;
+		}
+		// Stop capture, then let Muse flush the final transcript before committing.
+		finishingRef.current = true;
+		stopCapture();
+		socket.send(JSON.stringify({ type: "endStream" }));
+		finishTimeoutRef.current = setTimeout(commitDictation, 2500);
+	}, [commitDictation, stopCapture]);
 	const cancelDictation = useCallback(() => {
 		stopDictation();
 		setValue(dictationStartValueRef.current);
