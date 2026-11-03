@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
 	action,
+	internalAction,
 	internalMutation,
 	internalQuery,
 	mutation,
@@ -139,9 +140,23 @@ export const refreshMyCredits = action({
 		if (!identity) {
 			throw new Error("Unauthenticated");
 		}
-		await ctx.runAction(internal.polar.syncCreditBalance, {
+		const first = await ctx.runAction(internal.polar.syncCreditBalance, {
 			clerkUserId: identity.subject,
 		});
+		if (first === "no_meter") {
+			// Existing users provisioned before credits (or in the wrong
+			// Polar environment) have no meter. Re-running the idempotent
+			// onboarding Polar steps creates it, then sync again.
+			await ctx.runAction(internal.polar.ensureCustomer, {
+				clerkUserId: identity.subject,
+			});
+			await ctx.runAction(internal.polar.ensureBetaSubscription, {
+				clerkUserId: identity.subject,
+			});
+			await ctx.runAction(internal.polar.syncCreditBalance, {
+				clerkUserId: identity.subject,
+			});
+		}
 		return await ctx.runQuery(internal.credits.getAccountByUser, {
 			userId: identity.subject,
 		});
@@ -318,6 +333,49 @@ export const release = mutation({
 			outcome: outcome ?? "released",
 			updatedAt: Date.now(),
 		});
+	},
+});
+
+export const backfillExistingUsers = internalAction({
+	args: {},
+	handler: async (
+		ctx
+	): Promise<{
+		total: number;
+		synced: number;
+		noMeter: string[];
+		failed: string[];
+	}> => {
+		const userIds = await ctx.runQuery(internal.users.listProvisioned, {});
+		let synced = 0;
+		const noMeter: string[] = [];
+		const failed: string[] = [];
+		for (const clerkUserId of userIds) {
+			try {
+				await ctx.runAction(internal.polar.ensureCustomer, {
+					clerkUserId,
+				});
+				await ctx.runAction(internal.polar.ensureBetaSubscription, {
+					clerkUserId,
+				});
+				const result = await ctx.runAction(
+					internal.polar.syncCreditBalance,
+					{ clerkUserId }
+				);
+				if (result === "synced") {
+					synced += 1;
+				} else {
+					noMeter.push(clerkUserId);
+				}
+			} catch (error) {
+				console.error("Credit backfill failed for user", {
+					clerkUserId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+				failed.push(clerkUserId);
+			}
+		}
+		return { total: userIds.length, synced, noMeter, failed };
 	},
 });
 

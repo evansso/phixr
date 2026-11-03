@@ -182,7 +182,10 @@ function creditsMeterId() {
 
 export const syncCreditBalance = internalAction({
 	args: { clerkUserId: v.string() },
-	handler: async (ctx, { clerkUserId }): Promise<null> => {
+	handler: async (
+		ctx,
+		{ clerkUserId }
+	): Promise<"synced" | "no_meter"> => {
 		const polar = getPolar();
 		const meterId = creditsMeterId();
 		// Primary: Customer State (customers:read scope, which the app
@@ -211,8 +214,12 @@ export const syncCreditBalance = internalAction({
 					periodEnd = parsed;
 				}
 			}
-		} catch {
-			// Fall through to the Customer Meters API.
+		} catch (error) {
+			// Fall through to the Customer Meters API, but don't hide why.
+			console.error("Polar customer state lookup failed", {
+				clerkUserId,
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 		if (!meter) {
 			const listed = await polar.customerMeters.list({
@@ -223,7 +230,8 @@ export const syncCreditBalance = internalAction({
 			meter = listed.items[0] ?? null;
 		}
 		if (!meter) {
-			return null;
+			console.error("No Polar credit meter found for user", { clerkUserId });
+			return "no_meter";
 		}
 		await ctx.runMutation(internal.credits.upsertAccount, {
 			userId: clerkUserId,
@@ -237,7 +245,7 @@ export const syncCreditBalance = internalAction({
 		await ctx.runMutation(internal.credits.requeueFailedIngests, {
 			userId: clerkUserId,
 		});
-		return null;
+		return "synced";
 	},
 });
 

@@ -75,6 +75,16 @@ export const upsertFromClerk = internalMutation({
 	},
 });
 
+export const listProvisioned = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		const users = await ctx.db.query("users").collect();
+		return users
+			.filter((u) => u.provisioningStatus !== "deleted")
+			.map((u) => u.clerkUserId);
+	},
+});
+
 export const setPolarCustomer = internalMutation({
 	args: { clerkUserId: v.string(), polarCustomerId: v.string() },
 	handler: async (ctx, { clerkUserId, polarCustomerId }) => {

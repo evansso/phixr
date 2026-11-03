@@ -89,15 +89,15 @@ function BillingPanel() {
 				</p>
 			</div>
 
-			<div className="rounded-lg border p-4">
+			<div className="rounded-md border px-3 py-2.5">
 				{credits === undefined ? (
-					<div className="flex flex-col gap-2">
-						<Skeleton className="h-5 w-40" />
-						<Skeleton className="h-2.5 w-full" />
-						<Skeleton className="h-4 w-56" />
+					<div className="flex flex-col gap-1.5">
+						<Skeleton className="h-4 w-40" />
+						<Skeleton className="h-1.5 w-full" />
+						<Skeleton className="h-3.5 w-56" />
 					</div>
 				) : (
-					<div className="flex flex-col gap-2">
+					<div className="flex flex-col gap-1.5">
 						<div className="flex items-baseline justify-between gap-3">
 							<p className="font-medium text-sm">AI credits</p>
 							<p className="text-sm tabular-nums">
@@ -108,10 +108,10 @@ function BillingPanel() {
 						</div>
 						<div
 							aria-hidden="true"
-							className="h-2.5 w-full overflow-hidden rounded-full bg-muted"
+							className="h-1.5 w-full overflow-hidden rounded-sm bg-zinc-300 dark:bg-zinc-600"
 						>
 							<div
-								className={`h-full rounded-full transition-all ${
+								className={`h-full rounded-sm transition-all ${
 									exhausted
 										? "bg-destructive"
 										: low
